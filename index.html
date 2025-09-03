@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Content Security Policy -->
+    <!-- TODO: UPDATE THIS WITH WHATEVER URLS YOU WANT WHITELISTED IN THE APP FOR IMAGES  -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline';
+      style-src 'self' 'unsafe-inline';
+      img-src 'self' data: https://d2ry6alzkxkaqo.cloudfront.net https://mcusercontent.com https://cdn-images.mailchimp.com https://cdn.getro.com;
+      frame-src 'self' https://*;
+      connect-src 'self' https://*;
+      font-src 'self';
+      object-src 'none';
+      child-src 'none';
+    "
+    />
+
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+    default-src 'self'; 
+    script-src 'self' 'unsafe-inline'; 
+    style-src 'self' 'unsafe-inline'; 
+    img-src 'self' data: https://*; 
+    frame-src 'self' https://*; 
+    connect-src 'self' https://*; 
+    font-src 'self'; 
+    object-src 'none'; 
+    child-src 'none';
+"
+    />
+    <title>Grace's Craft Industry Insider Newsletter Workflow App</title>
+  </head>
+  <body>
+    <!-- <h1>💖 Hello World!</h1>
+    <p>Welcome to your Electron application.</p> -->
+    <div id="root"></div>
+    <script type="module" src="/src/renderer.tsx"></script>
+  </body>
+</html>

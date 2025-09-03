@@ -1,0 +1,51 @@
+[
+  {
+    "id": "a79272d2-c5e3-491e-b4ec-1e0ccc290344",
+    "name": "Matt Weinberger",
+    "title": "Editorial Director",
+    "imageUrl": "https://d2ry6alzkxkaqo.cloudfront.net/nltr/matt_weinberger.png",
+    "professionalUrl": "https://www.linkedin.com/in/matthewweinberger"
+  },
+  {
+    "id": "d9a52517-ab20-4375-bb9f-7740a3849cd3",
+    "name": "In Sik Rhee",
+    "title": "Investor, Vertex Ventures US",
+    "imageUrl": "https://d2ry6alzkxkaqo.cloudfront.net/nltr/sik_rhee.png",
+    "professionalUrl": "https://www.linkedin.com/in/insikrhee"
+  },
+  {
+    "id": "2bbf2836-538f-4e4d-a09c-14d30f2bcf95",
+    "name": "Jonathan Heiliger",
+    "title": "Investor, Vertex Ventures US",
+    "imageUrl": "https://d2ry6alzkxkaqo.cloudfront.net/nltr/jonathan_heiliger.png",
+    "professionalUrl": "https://www.linkedin.com/in/jheiliger"
+  },
+  {
+    "id": "839b7481-1e34-466a-846c-cf3ee4f23153",
+    "name": "Sandeep Bhadra",
+    "title": "Investor, Vertex Ventures US",
+    "imageUrl": "https://d2ry6alzkxkaqo.cloudfront.net/nltr/sandeep_bhadra.png",
+    "professionalUrl": "https://www.linkedin.com/in/sandeepbhadra"
+  },
+  {
+    "id": "45b9735d-5122-4633-b190-2cdf8ebcdb5f",
+    "name": "Noah Carr",
+    "title": "Investor, Vertex Ventures US",
+    "imageUrl": "https://d2ry6alzkxkaqo.cloudfront.net/nltr/noah_carr.png",
+    "professionalUrl": "https://www.linkedin.com/in/noah-carr-36baa722"
+  },
+  {
+    "id": "8a8fcb34-6b4d-490f-9c2f-5b95e2c14f54",
+    "name": "Megan Reynolds",
+    "title": "Investor, Vertex Ventures US",
+    "imageUrl": "https://d2ry6alzkxkaqo.cloudfront.net/nltr/megan_reynolds.png",
+    "professionalUrl": "https://www.linkedin.com/in/meganalicereynolds"
+  },
+  {
+    "id": "d077f1e6-bb8e-4534-9347-4c9f6e99f41a",
+    "name": "Simon Tiu",
+    "title": "Investor, Vertex Ventures US",
+    "imageUrl": "https://d2ry6alzkxkaqo.cloudfront.net/nltr/simon_tiu.png",
+    "professionalUrl": "https://www.linkedin.com/in/simontiu/"
+  }
+]
