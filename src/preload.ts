@@ -2,39 +2,47 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 import { contextBridge, ipcRenderer, shell, IpcRendererEvent } from 'electron';
-import { SaveHtmlArgs, SaveHtmlResult } from './global';
+import type { SaveHtmlArgs, SaveHtmlResult } from './types/shared';
+import type { AppSettings } from './types/AppSettings';
+import type { CreateCampaignPayload, CreateCampaignResult } from './types/campaign';
 
 contextBridge.exposeInMainWorld('electron', {
 
+   // user clicks upload button
+  sendReadyToUpload: (): void => ipcRenderer.send('ready-to-upload'),
 
-  onUploadZipCanceled: (cb: () => void) =>
-    ipcRenderer.on('upload-zip-canceled', () => cb()),
+
+  // optional UX: let renderer know dialog was canceled
+  onUploadZipCanceled: (cb: () => void) => {
+    ipcRenderer.on('upload-zip-canceled', cb);
+    return () => ipcRenderer.removeListener('upload-zip-canceled', cb);
+  },
+
   onUploadZipFailed: (cb: (msg: string) => void) =>
     ipcRenderer.on('upload-zip-failed', (_e, msg) => cb(msg)),
 
   saveHtmlToDisk: (args: SaveHtmlArgs): Promise<SaveHtmlResult> =>
     ipcRenderer.invoke('save-html-to-disk', args),
 
-  uploadZipFile: () => ipcRenderer.send('trigger-zip-upload'),
+  // uploadZipFile: () => ipcRenderer.send('trigger-zip-upload'),
   
   // ✅ Select ZIP file from the main process
-  selectZipFile: () => ipcRenderer.invoke('select-zip-file'),
+  // selectZipFile: () => ipcRenderer.invoke('select-zip-file'),
 
 
   getSignupPrompt: (): Promise<string> =>
     ipcRenderer.invoke('signup-prompt:get'),
   setSignupPrompt: (html: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('signup-prompt:set', html),
+  resetSignupPrompt: (): Promise<{ ok: boolean }> =>          
+    ipcRenderer.invoke('signup-prompt:reset'),
   onSignupPromptUpdated: (cb: (html: string) => void) =>
     ipcRenderer.on('signup-prompt:updated', (_e, html) => cb(html)),
   removeSignupPromptListener: () =>
     ipcRenderer.removeAllListeners('signup-prompt:updated'),
 
 
-
-  sendReadyToUpload: () => ipcRenderer.send('ready-to-upload'),
-
-
+ 
 
   // ✅ Listen for when ZIP file is selected
   onZipFileSelected: (callback: (filePath: string) => void) =>
@@ -76,16 +84,23 @@ contextBridge.exposeInMainWorld('electron', {
     //   linkResults: { link: string; status: string | number }[]
     // ) => cb(bodyHtml, previewText, subjectFromH1, finalHtml, linkResults);
 
-    ipcRenderer.on('html-file-processed', handler);
-    return () => ipcRenderer.removeListener('html-file-processed', handler);
+    // ipcRenderer.on('html-file-processed', handler);
+    // return () => ipcRenderer.removeListener('html-file-processed', handler);
+    ipcRenderer.on('html-file-processed', (_e, processedHTML, previewText, subjectFromH1, finalEmailHtml, linkResults) =>
+    cb(processedHTML, previewText, subjectFromH1, finalEmailHtml, linkResults));
   },
 
   // generic ipc access for cleanup
   ipcRenderer: {
     send: ipcRenderer.send,
     on: ipcRenderer.on,
+    once: ipcRenderer.once,
+    removeListener: ipcRenderer.removeListener,
     removeAllListeners: ipcRenderer.removeAllListeners,
   },
+
+  createCampaign: (payload: CreateCampaignPayload): Promise<CreateCampaignResult> =>
+  ipcRenderer.invoke('create-campaign', payload),
 
   sendTestEmail: (payload: {
     title: string;
@@ -104,6 +119,8 @@ contextBridge.exposeInMainWorld('electron', {
     senderFromEmail: string;
     senderFromName: string;
     html: string;
+    isTest: boolean;
+    previewText?: string;
   }): Promise<{ success: boolean; message?: string; data?: any }> =>
     ipcRenderer.invoke('send-now-email', payload),
 
@@ -113,6 +130,8 @@ contextBridge.exposeInMainWorld('electron', {
     senderFromEmail: string;
     senderFromName: string;
     html: string;
+    isTest: boolean;
+    previewText?: string;
     sendTime: string; // Include send time for scheduling
   }): Promise<{ success: boolean; message?: string; data?: any }> =>
     ipcRenderer.invoke('send-scheduled-email', payload),
@@ -126,12 +145,7 @@ contextBridge.exposeInMainWorld('electron', {
   },
 });
 
-type AppSettings = {
-  campaignName?: string;
-  autoCampaignEnabled?: boolean;
-  autoCampaignPattern?: string;
-  brand?: string;
-};
+
 
 contextBridge.exposeInMainWorld('settings', {
   get: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),

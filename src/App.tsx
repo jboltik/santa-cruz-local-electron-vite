@@ -10,11 +10,10 @@ import CodeMirror from '@uiw/react-codemirror';
 import { codeViewExtensions } from './editor/codeViewTheme';
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
-
+import CreateCampaignButton from './components/CreateCampaignButton';
 
 
 const LOCAL_STORAGE_KEY_SIGNUP_PROMPT = 'signupPromptHtmlContent';
-const DEFAULT_SIGNUP_PROMPT_HTML = ``;
 
 
 
@@ -63,22 +62,6 @@ const computeDateFromScheduleOrNow = (scheduleDate?: string, scheduleTime?: stri
   return moment(); // now (local)
 };
 
-type AppSettings = {
-  campaignName?: string;
-  autoCampaignEnabled?: boolean;
-  autoCampaignPattern?: string;
-  brand?: string;
-  // imageUploadEndpoint?: string; TODO
-  signupPromptHtml?: string;
-};
-
-
-
-
-
-
-
-
 
 
 // 🧪 Debug Electron preload injection
@@ -111,7 +94,7 @@ const App = () => {
     { link: string; status: string }[]
   >([]);
 
-
+const [linkCheckerEnabled, setLinkCheckerEnabled] = useState(true);
 
   const cmViewRef = useRef<EditorView | null>(null);
   // Lightweight outline of headings
@@ -199,6 +182,22 @@ const handleDownloadFinalHtml = async () => {
     setIsSavingFinal(false);
   }
 };
+
+
+useEffect(() => {
+  window.settings.get().then((s) => {
+    if (s.linkCheckerEnabled !== undefined) {
+      setLinkCheckerEnabled(s.linkCheckerEnabled);
+    }
+  });
+}, []);
+
+const toggleLinkChecker = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const newVal = e.target.checked;
+  setLinkCheckerEnabled(newVal);
+  window.settings.update({ linkCheckerEnabled: newVal });
+};
+
 
 
 // (optional) default to OS preference
@@ -351,17 +350,12 @@ useEffect(() => {
   (async () => {
     try {
       const html = await window.electron.getSignupPrompt();
-      setSignupPromptHtmlContent(
-        html ||
-          localStorage.getItem(LOCAL_STORAGE_KEY_SIGNUP_PROMPT) ||
-          DEFAULT_SIGNUP_PROMPT_HTML
-      );
+      // Trust main: it already returns saved value or the real default
+      setSignupPromptHtmlContent(html);
     } catch {
-      // If preload/main isn’t ready for some reason, still show something
-      setSignupPromptHtmlContent(
-        localStorage.getItem(LOCAL_STORAGE_KEY_SIGNUP_PROMPT) ||
-          DEFAULT_SIGNUP_PROMPT_HTML
-      );
+      // As a last resort, at least don't blank it out
+      const cached = localStorage.getItem(LOCAL_STORAGE_KEY_SIGNUP_PROMPT);
+      if (cached && cached.trim()) setSignupPromptHtmlContent(cached);
     }
   })();
 }, []);
@@ -381,33 +375,22 @@ useEffect(() => {
     setSignupPromptHtmlContent(event.target.value);
   };
 
-  const saveSignupPromptToLocalStorage = async () => {
-    // Mirror to localStorage (optional convenience)
-    localStorage.setItem(
-      LOCAL_STORAGE_KEY_SIGNUP_PROMPT,
-      signupPromptHtmlContent
-    );
+const saveSignupPromptToLocalStorage = async () => {
+  const html = signupPromptHtmlContent?.trim();
+  if (!html) {
+    alert('Tipline content is empty — not saving.');
+    return;
+  }
+  localStorage.setItem(LOCAL_STORAGE_KEY_SIGNUP_PROMPT, html);
+  await window.electron.setSignupPrompt(html);
+  alert('Tipline edit saved');
+};
 
-    // Persist in main (this is what your ZIP processing will use)
-    await window.electron.setSignupPrompt(signupPromptHtmlContent);
+const resetToDefault = async () => {
+  await window.electron.resetSignupPrompt();   // call the new handler
+  // UI will update from the 'signup-prompt:updated' event
+};
 
-    alert('Tipline edit saved');
-  };
-
-  const resetToDefault = async () => {
-  setSignupPromptHtmlContent(DEFAULT_SIGNUP_PROMPT_HTML);
-
-  // Mirror to localStorage (optional)
-    localStorage.setItem(
-      LOCAL_STORAGE_KEY_SIGNUP_PROMPT,
-      DEFAULT_SIGNUP_PROMPT_HTML
-    );
-
-    // Persist reset in main
-    await window.electron.setSignupPrompt(DEFAULT_SIGNUP_PROMPT_HTML);
-
-    alert('Reset to default content');
-  };
 
 const upsertTiplineBeforeSecondH2 = (html: string, tipHtml: string) => {
   const START = '<!--TIPLINE_START-->';
@@ -903,14 +886,19 @@ useEffect(() => {
         const campaignId = result.data?.campaign_id || 'N/A';
         setNowSendMessage('✅ Email sent immediately!');
 
-        const reportUrl = `https://us9.admin.mailchimp.com/analytics/reports/overview?id=${campaignId}`;
-        const campaignsUrl = 'https://us9.admin.mailchimp.com/campaigns/';
+        // const reportUrl = `https://us9.admin.mailchimp.com/analytics/reports/overview?id=${campaignId}`;
+        // const campaignsUrl = 'https://us9.admin.mailchimp.com/campaigns/';
+        // const campaignDraftUrl = `https://us10.admin.mailchimp.com/campaigns/edit?id=${campaignId}`
 
         alert(
-          `✅ Email sent immediately!\n\nCampaign ID: ${campaignId}\n\n` +
-            `View Campaign Report:\n${reportUrl}\n\n` +
-            `See All Campaigns (better for sending status):\n${campaignsUrl}`
+          `✅ Draft Created :)\n\nCampaign ID: ${campaignId}\n\n`
         );
+
+        // alert(
+        //   `✅ Email sent immediately!\n\nCampaign ID: ${campaignId}\n\n` +
+        //     `View Campaign Report:\n${reportUrl}\n\n` +
+        //     `See All Campaigns (better for sending status):\n${campaignsUrl}`
+        // );
       } else {
         const detail =
           result.data?.response?.data?.detail ||
@@ -1056,6 +1044,81 @@ const formatKeymap = React.useMemo(
     ]),
   [formatHtmlInEditor]
 );
+
+
+// ── Toolbar button styles (one height to rule them all) ───────────────────────
+const BTN_H = 36; // px
+
+const btnBase: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: BTN_H,
+  padding: '0 14px',        // unified horizontal padding
+  lineHeight: `${BTN_H}px`, // keeps text centered vertically if it wraps to inline
+  borderRadius: 5,
+  border: 'none',
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: 'pointer',
+  userSelect: 'none',
+  transition: 'filter 120ms ease, opacity 120ms ease',
+  gap: 8,                   // space between icon + text if you use an icon span
+};
+
+const btnNeutral: React.CSSProperties = { background: '#e6e6e6', color: '#111' };
+const btnPrimary: React.CSSProperties = { background: '#4d63ff', color: '#fff' };
+const btnSuccess: React.CSSProperties = { background: '#28a745', color: '#fff' };
+const btnWarn: React.CSSProperties    = { background: '#ffde97', color: '#444' };
+
+const btnDisabled: React.CSSProperties = {
+  background: '#e6e6e6',
+  color: '#8a8a8a',
+  cursor: 'not-allowed',
+  opacity: 0.6,
+  filter: 'grayscale(60%) saturate(60%)',
+};
+
+// Handy helper
+const merge = (...objs: React.CSSProperties[]) => Object.assign({}, ...objs);
+
+// Optional: tiny icon wrapper so emojis don’t change height
+const Icon: React.FC<React.PropsWithChildren> = ({ children }) => (
+  <span aria-hidden style={{ display: 'inline-block', lineHeight: 1 }}>
+    {children}
+  </span>
+);
+
+// ── Footer button styles (a bit shorter than the toolbar)
+const FOOTER_H = 32;
+
+const btnFooterBase: React.CSSProperties = {
+  ...btnBase,
+  height: FOOTER_H,
+  lineHeight: `${FOOTER_H}px`,
+  padding: '0 12px',
+  fontSize: 13,
+  fontWeight: 600,
+};
+
+const toggleWrap: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  height: BTN_H,
+  padding: '0 10px',
+  color: '#cfd3dc', // subtle label on dark bg
+  borderRadius: 5,
+  border: '1px solid rgba(255,255,255,0.08)',
+  background: 'rgba(255,255,255,0.04)',
+  whiteSpace: 'nowrap',
+};
+
+const toggleCheckbox: React.CSSProperties = {
+  margin: 0,
+  width: 16,
+  height: 16,
+};
 
 
   return (
@@ -1283,148 +1346,97 @@ const formatKeymap = React.useMemo(
 
           {/* Row 2: Placeholder */}
 
-          <div>
-            {/* <div
-              style={{
-                padding: '0px 10px 10px 10px',
-                display: 'flex',
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-              }}
-            > */}
-            <div
-              style={{
-                padding: '0px 10px 10px 10px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                gap: '20px',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '15px',
-                  alignItems: 'flex-start',
-                }}
-              >
-                {/* Left aligned button */}
-                <button
-                  onClick={handleSaveChanges}
-                  disabled={!hasChanges}
-                  style={{
-                    backgroundColor: hasChanges ? '#28a745' : '#ccc',
-                    color: 'white',
-                    animation: hasChanges ? 'flash 1s infinite' : 'none',
-                    padding: '10px 8px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    borderRadius: '5px',
-                  }}
-                >
-                  Save Changes
-                </button>
+         {/* ── Top toolbar row (one flex row, three children) ─────────────── */}
+<div
+  style={{
+    padding: '0 10px 10px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 20,
+  }}
+>
+  {/* Left cluster */}
+  <div style={{ display: 'flex', gap: 12 }}>
+    <button
+      onClick={handleSaveChanges}
+      disabled={!hasChanges}
+      style={merge(btnBase, hasChanges ? btnSuccess : btnDisabled)}
+    >
+      Save Changes
+    </button>
 
-         
-              <button
-                onClick={() => {
-                  setIsProcessingUpload(true);           // ← add this
-                  window.electron.sendReadyToUpload();
-                }}
-                style={{
-                  backgroundColor: '#ccc',
-                  color: 'black',
-                  padding: '8px 8px',
-                  height: '35px',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: isProcessingUpload ? 'not-allowed' : 'pointer',  // optional UX
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  // keep flashing until processedHtml arrives:
-                  animation: shouldFlashUpload ? 'flash 1.1s ease-in-out infinite' : 'none',
-                }}
-                title={shouldFlashUpload ? 'Start here: upload your Google Docs ZIP' : undefined}
-                disabled={isProcessingUpload} // optional UX: prevent double clicks
-              >
-                {isProcessingUpload ? 'Processing content…' : '📤 Upload Google Doc ZIP File'}
-              </button>
+    <button
+      onClick={() => {
+        setIsProcessingUpload(true);
+        window.electron.sendReadyToUpload();
+      }}
+      disabled={isProcessingUpload}
+      style={merge(
+        btnBase,
+        isProcessingUpload ? btnDisabled : btnNeutral,
+        shouldFlashUpload ? { animation: 'flash 1.1s ease-in-out infinite' } : {}
+      )}
+      title={shouldFlashUpload ? 'Start here: upload your Google Docs ZIP' : undefined}
+    >
+      <Icon>📤</Icon> Upload Google Doc ZIP File
+    </button>
 
-              <button
-                onClick={handleDownloadFinalHtml}
-                disabled={isDownloadDisabled}
-                title={downloadDisableReason}
-                aria-disabled={isDownloadDisabled}
-                style={{
-                  ...downloadBaseStyle,
-                  ...(isDownloadDisabled ? downloadDisabledStyle : downloadEnabledStyle),
-                }}
-              >
-                {isSavingFinal ? 'Saving…' : '⬇️ Download Full HTML'}
-              </button>
+    <button
+      onClick={handleDownloadFinalHtml}
+      disabled={isDownloadDisabled}
+      title={downloadDisableReason}
+      aria-disabled={isDownloadDisabled}
+      style={merge(btnBase, isDownloadDisabled ? btnDisabled : btnNeutral)}
+    >
+      <Icon>⬇️</Icon> {isSavingFinal ? 'Saving…' : 'Download Full HTML'}
+    </button>
+  </div>
 
-              </div>
+  {/* Right cluster (push to the far right) */}
+  <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
+    <button
+      onClick={handleSendTest}
+      disabled={hasChanges || testStatus === 'loading'}
+      style={merge(
+        btnBase,
+        hasChanges || testStatus === 'loading' ? btnDisabled : btnPrimary
+      )}
+    >
+      {testStatus === 'loading' ? '⏳ Sending...' : 'Send Test'}
+    </button>
 
-              {/* Container for right aligned buttons */}
-              <div>
-                <button
-                  onClick={handleSendTest}
-                  disabled={hasChanges || testStatus === 'loading'}
-                  style={{
-                    backgroundColor:
-                      hasChanges || testStatus === 'loading'
-                        ? '#ccc'
-                        : '#4d63ff',
-                    color: 'white',
-                    padding: '10px 20px',
-                    border: 'none',
-                    cursor:
-                      hasChanges || testStatus === 'loading'
-                        ? 'not-allowed'
-                        : 'pointer',
-                    borderRadius: '5px',
-                  }}
-                >
-                  {testStatus === 'loading' ? '⏳ Sending...' : 'Send Test'}
-                </button>
+    {/* <CreateCampaignButton
+      isDisabled={hasChanges || isSavingFinal || !finalHtml}
+      finalEmailHtml={finalEmailHtml}
+      previewText={previewText}
+      subjectFromH1={subjectFromH1}
+      senderFromName={form.senderFromName}
+      senderFromEmail={form.senderFromEmail}
+      listId={form.listId}
+      campaignName={settings.campaignName}
+    /> */}
 
-                <button
-                  onClick={handleSendNow}
-                  disabled={hasChanges || isNowSending}
-                  style={{
-                    backgroundColor: hasChanges ? '#ccc' : '#ffde97',
-                    color: '#444444',
-                    padding: '10px 20px',
-                    border: 'none',
-                    cursor:
-                      hasChanges || isNowSending ? 'not-allowed' : 'pointer',
-                    borderRadius: '5px',
-                    marginLeft: '15px',
-                    opacity: isNowSending ? 0.6 : 1,
-                  }}
-                >
-                  {isNowSending ? '⏳ Sending...' : 'Send Now'}
-                </button>
+    <button
+      onClick={handleSendNow}
+      disabled={hasChanges || isNowSending}
+      style={merge(
+        btnBase,
+        hasChanges || isNowSending ? btnDisabled : btnWarn,
+        isNowSending ? { opacity: 0.8 } : {}
+      )}
+    >
+      {isNowSending ? '⏳ Creating Draft...' : 'Create Draft in MC'}
+    </button>
 
-                <button
-                  onClick={handleSchedule}
-                  disabled={hasChanges}
-                  style={{
-                    backgroundColor: hasChanges ? '#ccc' : '#ffde97',
-                    color: '#444444',
-                    padding: '10px 20px',
-                    border: 'none',
-                    cursor: hasChanges ? 'not-allowed' : 'pointer',
-                    borderRadius: '5px',
-                    marginLeft: '15px',
-                  }}
-                >
-                  Schedule
-                </button>
-              </div>
-            </div>
-          </div>
+    {/* <button
+      onClick={handleSchedule}
+      disabled={hasChanges}
+      style={merge(btnBase, hasChanges ? btnDisabled : btnWarn)}
+    >
+      Schedule
+    </button> */}
+  </div>
+</div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <div
@@ -1434,45 +1446,18 @@ const formatKeymap = React.useMemo(
                 minWidth: '620px',
               }}
             >
-              {/* <textarea
-                style={{
-                  flex: 1,
-                  width: '100%',
-                  fontFamily: 'monospace',
-                  fontSize: '14px',
-                  height: '500px',
-                }}
-                value={rawHtml}
-                ref={rawHtmlRef}
-                onChange={handleRawHtmlChange} // ✅ Use this function
-              /> */}
-
 
             <CodeMirror
               value={rawHtml}
               height="500px"
-              // basicSetup={{
-              //   lineNumbers: false,
-              //   foldGutter: true,
-              //   highlightActiveLine: false,
-              // }}
                theme={darkMode ? oneDark : undefined}
                 extensions={[
     ...CM_EXT,
     keymap.of([{ key: 'Mod-Shift-f', run: () => (formatHtmlInEditor(), true) }]),
-    ...(darkMode ? [brightContent] : []), // brighten plain text
-    chromeTheme,                          // ← keep LAST so it overrides
+    ...(darkMode ? [brightContent] : []), 
+    chromeTheme,                         
   ]}
-              // extensions={[
-              //   cmHtml({ selfClosingTags: true }),
-              //   keymap.of([...searchKeymap]),   // Cmd/Ctrl+F, F3 etc.
-              //   search({ top: true }),
-              //   highlightSelectionMatches(),
-              //   EditorView.lineWrapping,
-              //   h2TealHighlight,
-              //   styleAttrGray,
-              //   styleAttrGrayTheme,
-              // ]}
+
               onCreateEditor={(view) => (cmViewRef.current = view)}
               onChange={(value) => {
                 setRawHtml(value);
@@ -1487,76 +1472,49 @@ const formatKeymap = React.useMemo(
 
 
 
-              <div style={{ display: 'flex', gap: '5px', marginTop: '0px' }}>
-                {/* <button
-                  onClick={() => setRawHtml(processedHtml || '')}
-                  style={{
-                    marginTop: '10px',
-                    padding: '9px',
-                    backgroundColor: '#9d8189',
-                    color: 'white',
-                    border: 'none',
-                    cursor: 'pointer',
-                    borderRadius: '5px',
-                    marginRight: '10px',
-                  }}
-                >
-                  Reset to HTML Before Any Edits
-                </button> */}
-
-                {/* <button
-                  onClick={async () => {
-                    try {
-                      const formatted = await prettier.format(rawHtml, {
-                        parser: 'html',
-                        plugins: [parserHtml],
-                        printWidth: 100,
-                        htmlWhitespaceSensitivity: 'ignore',
-                      });
-                      setRawHtml(formatted);
-                    } catch (e) {
-                      alert('Could not format HTML: ' + (e as Error).message);
-                    }
-                  }}
-                  style={{ marginLeft: 8 }}
-                >
-                  Format HTML
-                </button> */}
-
-<label style={{ color: '#fff', fontSize: 12 }}>
+              <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
+<label style={{ color: '#fff', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
   <input
     type="checkbox"
     checked={darkMode}
     onChange={(e) => setDarkMode(e.target.checked)}
-    style={{ marginRight: 6 }}
+    style={{ margin: 0 }}
   />
   Dark editor
 </label>
 
-                <button
+<button
   onClick={formatHtmlInEditor}
-  style={{ marginLeft: 8, padding: '8px', borderRadius: 5 }}
+  style={merge(btnFooterBase, btnNeutral, { marginLeft: 8 })}
 >
   Format HTML
 </button>
 
+<button
+  onClick={() => setShowSignupPromptEditor(true)}
+  style={merge(btnFooterBase, { background: '#9d8189', color: '#fff', marginLeft: 8 })}
+>
+  <Icon>✏️</Icon> Edit Tipline Section
+</button>
 
-                <button
-                  onClick={() => setShowSignupPromptEditor(true)}
-                  style={{
-                    marginTop: '10px',
-                    padding: '8px',
-                    backgroundColor: '#9d8189',
-                    color: 'white',
-                    border: 'none',
-                    cursor: 'pointer',
-                    borderRadius: '5px',
-                  }}
-                >
-                  ✏️ Edit Tipline Section
-                </button>
+  {/* Settings: Enable Link Checker (moved down here) */}
+  <label style={{ color: '#cfd3dc', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 12 }}>
+    <input
+      type="checkbox"
+      checked={linkCheckerEnabled}
+      onChange={toggleLinkChecker}
+      style={{ margin: 0 }}
+    />
+    Enable Link Checker
+  </label>
+
               </div>
             </div>
+
+
+
+
+
             <div
               style={{
                 padding: '10px',

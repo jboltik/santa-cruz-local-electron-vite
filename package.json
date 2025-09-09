@@ -1,8 +1,8 @@
 {
-  "name": "electron-kara-three-things-3",
-  "productName": "VVUS Newsletter Workflow App",
+  "name": "craft-industry-workflow",
+  "productName": "Craft Industry Insider Newsletter Workflow",
   "version": "1.0.0",
-  "description": "A workflow app for producting VVUS Newsletter Workflow",
+  "description": "A workflow app for producting the Craft Industry Insider Newsletter",
   "main": ".vite/build/main.js",
   "scripts": {
     "start": "electron-forge start",

@@ -17,6 +17,6 @@
       "@renderer/*": ["src/renderer/*"]
     }
   },
-  "include": ["src/**/*", "src/App.tsx", "forge.env.d.ts"],
+  "include": ["src/**/*", "src/App.tsx", "forge.env.d.ts", "src/global.d.ts"],
   "exclude": ["node_modules", "**/*.spec.ts"]
 }

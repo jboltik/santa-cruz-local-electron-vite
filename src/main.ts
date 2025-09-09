@@ -10,6 +10,11 @@ import axios from 'axios';
 import FormData from 'form-data';
 import type { Element } from 'domhandler';
 import Store from 'electron-store';
+import type { AppSettings } from './types/AppSettings';
+import type { ImageUploadResponse } from './types/api';
+import { CreateCampaignPayload, CreateCampaignResult } from './types/campaign';
+
+
 
 const store = new Store();
 
@@ -21,14 +26,6 @@ const store = new Store();
 if (started) {
   app.quit();
 }
-
-type AppSettings = {
-  campaignName?: string;
-  autoCampaignEnabled?: boolean;
-  autoCampaignPattern?: string;
-  brand?: string;
-  signupPromptHtml?: string;
-};
 
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
 
@@ -45,10 +42,25 @@ function saveSettings(s: AppSettings) {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(s, null, 2), 'utf8');
 }
 
+
 let settingsCache: AppSettings = loadSettings();
+
+const DEFAULT_SIGNUP_PROMPT_HTML = `<p style="font-size: 8px;line-height: 150%;color: #202020;">&nbsp;</p><table role="presentation" style="width: 100%;max-width: 620px;margin: 0 auto;border-radius: 5px;background-color: #FDf9ED;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" cellspacing="0" cellpadding="10" align="center" width="100%" class="mobile-table" bgcolor="#FDf9ED"><tbody><tr><td align="center" valign="top" style="padding: 25px 20px 10px 20px;font-size: 36px;line-height: 125%;color: #0093ac;font-weight: normal;font-family: 'Raleway',Helvetica,Arial,Lucida,sans-serif;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;"><center>Tipline</center></td></tr><tr><td align="center" valign="top" style="padding: 0px 15px 25px 15px;color: #202020;font-weight: normal;line-height: 150%;font-size: 18px;font-family: 'Open Sans',Helvetica,Arial,Lucida,sans-serif;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;"><center>Got a confidential news tip? Drop us a line <a href="https://forms.gle/5eDFy7kJwa62H9KMA" target="_blank" style="color: #dd623c;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;text-decoration: underline;">here</a>.</center></td></tr></tbody></table><p style="font-size: 4px;line-height: 150%;">&nbsp;</p>`;
+
+
+let latestSignupPromptHtml: string | null =
+  settingsCache.signupPromptHtml ?? DEFAULT_SIGNUP_PROMPT_HTML;
 
 ipcMain.handle('signup-prompt:get', async () => {
   return settingsCache.signupPromptHtml ?? DEFAULT_SIGNUP_PROMPT_HTML;
+});
+
+ipcMain.handle('signup-prompt:reset', async () => {
+  latestSignupPromptHtml = DEFAULT_SIGNUP_PROMPT_HTML;
+  settingsCache = { ...settingsCache, signupPromptHtml: DEFAULT_SIGNUP_PROMPT_HTML };
+  saveSettings(settingsCache);
+  mainWindow?.webContents.send('signup-prompt:updated', DEFAULT_SIGNUP_PROMPT_HTML);
+  return { ok: true };
 });
 
 ipcMain.handle('signup-prompt:set', async (_evt, html: string) => {
@@ -59,6 +71,7 @@ ipcMain.handle('signup-prompt:set', async (_evt, html: string) => {
   return { ok: true };
 });
 
+// When returning settings to the renderer, keep whatever is saved
 ipcMain.handle('settings:get', async () => settingsCache);
 
 ipcMain.handle('settings:update', async (_evt, patch: Partial<AppSettings>) => {
@@ -82,9 +95,7 @@ ipcMain.handle('save-html-to-disk', async (_evt, { html, defaultName }) => {
 
 
 let mainWindow: BrowserWindow | null = null; // Declare mainWindow in a higher scope
-let latestSignupPromptHtml: string | null = null;
 
-const DEFAULT_SIGNUP_PROMPT_HTML = `<p style="font-size: 8px;line-height: 150%;color: #202020;">&nbsp;</p><table role="presentation" style="width: 100%;max-width: 620px;margin: 0 auto;border-radius: 5px;background-color: #FDf9ED;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" cellspacing="0" cellpadding="10" align="center" width="100%" class="mobile-table" bgcolor="#FDf9ED"><tbody><tr><td align="center" valign="top" style="padding: 25px 20px 10px 20px;font-size: 36px;line-height: 125%;color: #0093ac;font-weight: normal;font-family: 'Raleway',Helvetica,Arial,Lucida,sans-serif;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;"><center>Tipline</center></td></tr><tr><td align="center" valign="top" style="padding: 0px 15px 25px 15px;color: #202020;font-weight: normal;line-height: 150%;font-size: 18px;font-family: 'Open Sans',Helvetica,Arial,Lucida,sans-serif;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;"><center>Got a confidential news tip? Drop us a line <a href="https://forms.gle/5eDFy7kJwa62H9KMA" target="_blank" style="color: #dd623c;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;text-decoration: underline;">here</a>.</center></td></tr></tbody></table><p style="font-size: 4px;line-height: 150%;">&nbsp;</p>`;
 
 
 // Function to create the main application window
@@ -119,17 +130,17 @@ const createWindow = () => {
 
 
   // Open the DevTools detached from the window
-  console.log('🔍 Attempting to open DevTools...');
-  mainWindow.webContents.openDevTools({ mode: 'detach' });
+  // console.log('🔍 Attempting to open DevTools...');
+  // mainWindow.webContents.openDevTools({ mode: 'detach' });
 
   // Use on (not once) if you want the file upload to be triggerable multiple times (e.g., for “Re-Upload ZIP”).
   ipcMain.on('ready-to-upload', async () => {
-    console.log(
+       console.log(
       '📥 Renderer signaled ready-to-upload. Starting file upload...'
     );
-    await handleFileUpload();
-  });
-
+  if (!mainWindow) return;
+  await handleFileUpload(); // can be called repeatedly
+});
 
 
   // Handle window close event
@@ -394,11 +405,15 @@ function extractClassMappings(htmlContent: string) {
   return classMappings;
 }
 
-interface ApiResponse {
-  publicUrl: string;
+
+// ----- Runtime guard (place above the function) -----
+function isImageUploadResponse(x: unknown): x is { publicUrl: string }[] {
+  return Array.isArray(x) && x.every(
+    (i) => i && typeof (i as any).publicUrl === 'string'
+  );
 }
 
-// BELOW IS THE LATEST FUNCITON TO USE
+// ----- Upload with retries/backoff -----
 async function uploadImageToS3(
   imagePath: string,
   retries = 3
@@ -410,46 +425,62 @@ async function uploadImageToS3(
       const formData = new FormData();
       formData.append('file', fs.createReadStream(imagePath));
 
-      const response = await axios.post<ApiResponse[]>(
-        'https://hd1b1k93od.execute-api.us-east-1.amazonaws.com/uploads',
+      const { data } = await axios.post<import('./types/api').ImageUploadResponse>(
+        'https://7di6r3pc52.execute-api.us-east-1.amazonaws.com/uploads',
         formData,
         {
-          headers: { ...formData.getHeaders() },
-          timeout: 30000, // Increase timeout to 30s
+          headers: formData.getHeaders(),
+          timeout: 30_000,
         }
       );
 
-      if (response.data?.length > 0 && response.data[0]?.publicUrl) {
-        console.log(
-          `✅ Image uploaded successfully: ${response.data[0].publicUrl}`
-        );
-        return response.data[0].publicUrl;
-      } else {
-        console.error(
-          `❌ Unexpected API Response (Attempt ${attempt}):`,
-          response.data
-        );
-      }
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        console.error(
-          `❌ Upload error (Attempt ${attempt}): ${error.code} - ${error.message}`
-        );
-      } else {
-        console.error(`❌ Unknown error (Attempt ${attempt}):`, error);
+      if (!isImageUploadResponse(data) || data.length === 0) {
+        throw new Error(`Unexpected API response shape: ${JSON.stringify(data)}`);
       }
 
-      if (attempt < retries) {
-        const delay = Math.pow(2, attempt) * 1000; // Exponential backoff (2s, 4s, 8s)
-        console.log(`⏳ Retrying in ${delay / 1000} seconds...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
+      const url = data[0].publicUrl;
+      console.log(`✅ Image uploaded successfully: ${url}`);
+      return url;
+    } catch (err) {
+      // Decide if we should retry
+      let shouldRetry = attempt < retries;
+
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        const code = err.code;
+        console.error(
+          `❌ Upload error (Attempt ${attempt}/${retries})`,
+          { status, code, message: err.message }
+        );
+
+        // Retry on 5xx/429 and network-ish errors; otherwise don't waste attempts
+        if (status && !(status >= 500 || status === 429)) {
+          shouldRetry = false;
+        }
+        if (!status && !(code === 'ECONNABORTED' || code === 'ETIMEDOUT' || code === 'ENOTFOUND')) {
+          // Unknown non-HTTP error with no status — still allow retry by default
+        }
+      } else {
+        console.error(`❌ Unknown error (Attempt ${attempt}/${retries}):`, err);
       }
+
+      if (!shouldRetry) break;
+
+      // Exponential backoff with jitter
+      const base = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s...
+      const jitter = Math.floor(Math.random() * 400); // +0–400ms
+      const delay = base + jitter;
+
+      console.log(`⏳ Retrying in ${(delay / 1000).toFixed(1)}s...`);
+      await new Promise((r) => setTimeout(r, delay));
     }
   }
 
   console.error(`🚨 Upload failed after ${retries} attempts: ${imagePath}`);
   return null;
 }
+
+
 
 /* Google Docs exports text formatting via CSS classes, not inline tags like <b>, <em>, etc.
 This function translates those classes into semantic HTML tags — which is better for email clients (like Mailchimp) and easier to style consistently.
@@ -593,6 +624,62 @@ function updateImageStyles($: cheerio.CheerioAPI) {
 
   console.log('✅ Image styles updated!');
 }
+
+
+
+function makeDividerP($: cheerio.CheerioAPI) {
+  return $('<p>')
+    .attr('data-h2-snippet', '1')
+    .attr(
+      'style',
+      [
+        'margin:24px 0',
+        'border:0',
+        'border-top:1px solid #efefef',
+        'height:0',
+        'line-height:0',
+        'display:block',
+        'width:100%',
+        'mso-line-height-rule:exactly',
+        'color:#202020',
+      ].join(';')
+    )
+    .html('&nbsp;');
+}
+
+// Ensure exactly ONE divider immediately before every <h2>
+function ensureSingleDividerBeforeH2($: cheerio.CheerioAPI) {
+  $('h2').each((_, el) => {
+    const $h2 = $(el);
+
+    // Collapse stacked duplicates
+    let prev = $h2.prev();
+    while (
+      prev.is('p[data-h2-snippet], p[style*="border: 1px solid #efefef"]') &&
+      prev.prev().is('p[data-h2-snippet], p[style*="border: 1px solid #efefef"]')
+    ) {
+      prev.prev().remove(); // remove the farther one
+      prev = $h2.prev();    // re-check
+    }
+
+    // If the immediate previous is already a divider, do nothing
+    if (
+      $h2.prev().is('p[data-h2-snippet]') ||
+      $h2.prev().is('p[style*="border: 1px solid #efefef"]')
+    ) {
+      return;
+    }
+
+    // Otherwise insert your divider
+    $h2.before(
+      `<p data-h2-snippet="1" style="border: 1px solid #efefef;font-size: 0px;line-height: 0px;color: #202020;">&nbsp;</p>`
+    );
+  });
+}
+
+
+
+
 
 
 
@@ -811,10 +898,6 @@ if ($hotJobsH2.length) {
       `display: block;padding: 25px 0px 15px 0px;font-size: 36px;line-height: 125%;color: #0093ac;font-weight: normal;font-family: 'Raleway',Helvetica,Arial,Lucida,sans-serif;margin: 0;`
     );
 
-    // Insert spacer paragraph before the h2
-    $el.before(
-      '<p style="border: 1px solid #efefef;font-size: 0px;line-height: 0px;color: #202020;">&nbsp;</p>'
-    );
     $el.attr('mc:edit', `secth2${index + 1}`);
   });
 
@@ -826,6 +909,11 @@ const $lastH2 = $('h2').last();
 $lastH2
   .addClass('final')             
   .attr('style', finalH2Style);
+
+// insert line above every h2
+// make sure it is below styling paragraphs
+ensureSingleDividerBeforeH2($);
+
 
 
 // Add subhead style to h3
@@ -866,12 +954,11 @@ $lastH2
   });
 
 // Paragraph text style
-  $('p').each((index, el) => {
+$('p')
+  .not('[data-h2-snippet]')
+  .each((index, el) => {
     const $el = $(el);
-    $el.attr(
-      'style',
-      `font-size: 18px;line-height: 150%;color: #202020;`
-    );
+    $el.attr('style', `font-size: 18px;line-height: 150%;color: #202020;`);
     $el.attr('mc:edit', `paragr${index + 1}`);
   });
 
@@ -935,23 +1022,7 @@ $('h6').each((_, el) => {
   $old.replaceWith($newH6);
 });
 
-// ----- Insert a snippet above every <h2> -----
-const H2_SNIPPET_HTML = `<p data-h2-snippet="1" style="border: 1px solid #efefef;font-size:0;line-height:0;color:#202020;">&nbsp;</p>`;
 
-// If you need to skip the last orange h2, switch to: $('h2').not('.final').each(...)
-$('h2').each((_, el) => {
-  const $h2 = $(el);
-
-  // avoid duplicates if processing runs twice
-  const hasSnippetAlready =
-    $h2.prev().is('[data-h2-snippet]') ||
-    $h2.prevAll('[data-h2-snippet]').first().next()[0] === el; // nearest previous is the snippet
-
-  if (!hasSnippetAlready) {
-    $h2.before(H2_SNIPPET_HTML);
-  }
-});
-// ----------------------------------------------
 
 
 
@@ -1091,7 +1162,11 @@ async function validateLinks(htmlContent: string) {
     return result.status !== 200 && !(isLinkedIn && result.status === 999);
   });
 
-  if (failedLinks.length > 0 && mainWindow) {
+  if (
+    (settingsCache.linkCheckerEnabled ?? true) &&
+    failedLinks.length > 0 &&
+    mainWindow
+  ) {
     dialog.showMessageBox(mainWindow, {
       type: 'warning',
       title: 'Broken Links Detected',
@@ -1111,74 +1186,157 @@ async function validateLinks(htmlContent: string) {
 async function processAndValidateHtml(htmlContent: string) {
   const { html: processedHTML, previewText, subjectFromH1 } = await modifyHtml(htmlContent);
 
+  // ✅ Respect the user toggle to turn link checking on or off
+  const enabled = settingsCache.linkCheckerEnabled ?? true;
+
   // ✅ Validate links
-  const linkResults = await validateLinks(processedHTML);
+  const linkResults = enabled ? await validateLinks(processedHTML) : [];
 
   // ✅ Just return (don't send here)
   return { processedHTML, previewText, subjectFromH1, linkResults };
 }
 
 
+// ipcMain.handle('create-campaign', async (_evt, payload: CreateCampaignPayload): Promise<CreateCampaignResult> => {
+//   // basic validation (keeps renderer UI honest)
+//   const missing: string[] = [];
+//   if (!payload.listId) missing.push('listId');
+//   if (!payload.subjectLine) missing.push('subjectLine');
+//   if (!payload.fromName) missing.push('fromName');
+//   if (!payload.fromEmail) missing.push('fromEmail');
+//   if (!payload.html) missing.push('html');
+
+//   if (missing.length) {
+//     return { success: false, message: `Missing required fields: ${missing.join(', ')}` };
+//   }
+
+//   // Logging only; don’t print the full HTML
+//   const { html, ...rest } = payload;
+//   console.log('🧱 [Create Campaign] Logging only. Would create draft with:', rest);
+
+//   // Return a fake “draft created” result so the UI can show success
+//   return {
+//     success: true,
+//     message: 'Campaign created (draft, local log only).',
+//     data: {
+//       id: `local-${Date.now()}`,
+//       status: 'save',
+//       webUrl: undefined,
+//       archiveUrl: undefined,
+//       raw: { logged: true }
+//     }
+//   };
+// });
+
+
 ipcMain.handle('sendTestEmail', async (_event, payload) => {
   const { html, ...rest } = payload;
   console.log('📤 [Logging only] Would send test email with payload:', rest);
 
-  // console.log('📤 Received test email payload from renderer:', payload);
+  console.log('📤 Received test email payload from renderer:', payload);
 
-  // try {
-  //   const response = await axios.post(
-  //     'https://hd1b1k93od.execute-api.us-east-1.amazonaws.com/mailchimp',
-  //     {
-  //       ...payload,
-  //       isTest: true,
-  //     },
-  //     {
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //         'x-api-key': 'YOUR_SHARED_SECRET'
-  //       },
-  //     }
-  //   );
+  try {
+    const response = await axios.post(
+      'https://t9y4qwn80d.execute-api.us-east-1.amazonaws.com/Prod/send',
+      {
+        ...payload,
+        isTest: true,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': 'grace-sending-from-her-computer-12345'
+        },
+      }
+    );
 
-  //   console.log('✅ Test email sent successfully:', response.data);
-  //   return {
-  //     success: true,
-  //     message: 'Test email sent!',
-  //     data: response.data,
-  //   };
-  // } catch (error) {
-  //   console.error('❌ Error sending test email:', error);
+    console.log('✅ Test email sent successfully:', response.data);
+    return {
+      success: true,
+      message: 'Test email sent!',
+      data: response.data,
+    };
+  } catch (error) {
+    console.error('❌ Error sending test email:', error);
 
-  //   if (axios.isAxiosError(error)) {
-  //     const detail = error.response?.data?.detail;
-  //     const fallback = error.message || 'Request failed';
+    if (axios.isAxiosError(error)) {
+      const detail = error.response?.data?.detail;
+      const fallback = error.message || 'Request failed';
 
-  //     return {
-  //       success: false,
-  //       message: detail || fallback,
-  //       data: error.response?.data || null,
-  //     };
-  //   }
+      return {
+        success: false,
+        message: detail || fallback,
+        data: error.response?.data || null,
+      };
+    }
 
-  //   return {
-  //     success: false,
-  //     message: 'Unknown error occurred',
-  //     data: null,
-  //   };
-  // }
+    return {
+      success: false,
+      message: 'Unknown error occurred',
+      data: null,
+    };
+  }
 });
 
-
-
-ipcMain.handle('send-now-email', async (event, payload) => {
+// temporarily calling send now in order to quickly replace the button switch this back later
+ipcMain.handle('send-now-email', async (_event, payload) => {
   const { html, ...rest } = payload;
-  console.log('📤 [Logging only] Would send email with payload:', rest);
+
+  console.log('📤 Creating draft email from:', payload);
+
+  try {
+    const response = await axios.post(
+      'https://t9y4qwn80d.execute-api.us-east-1.amazonaws.com/Prod/send',
+      {
+        ...payload,
+        isDraft: true,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': 'grace-sending-from-her-computer-12345'
+        },
+      }
+    );
+
+    console.log('✅ Draft email created (but not sent)', response.data);
+    return {
+      success: true,
+      message: 'Draft email created (but not sent)',
+      data: response.data,
+    };
+  } catch (error) {
+    console.error('❌ Error sending test email:', error);
+
+    if (axios.isAxiosError(error)) {
+      const detail = error.response?.data?.detail;
+      const fallback = error.message || 'Request failed';
+
+      return {
+        success: false,
+        message: detail || fallback,
+        data: error.response?.data || null,
+      };
+    }
+
+    return {
+      success: false,
+      message: 'Unknown error occurred',
+      data: null,
+    };
+  }
+});
+
+// TODO: Bring this back to send now button 
+// ipcMain.handle('send-now-email', async (event, payload) => {
+//   const { html, ...rest } = payload;
+//   console.log('📤 [Logging only] Would send email with payload:', rest);
 
   // console.log('📤 Sending Now email request received:', payload);
 
   // try {
   //   const response = await axios.post(
-  //     'https://hd1b1k93od.execute-api.us-east-1.amazonaws.com/mailchimp', // ✅ Replace with your actual API Gateway/Lambda endpoint
+  //     'YOUR_GATE_WAY', // ✅ Replace with your actual API Gateway/Lambda endpoint
   //     payload,
   //     {
   //       headers: {
@@ -1215,17 +1373,17 @@ ipcMain.handle('send-now-email', async (event, payload) => {
   //     data: null,
   //   };
   // }
-});
+// });
 
-ipcMain.handle('send-scheduled-email', async (event, payload) => {
-  const { html, ...rest } = payload;
-  console.log('📤 [Logging only] Would schedule email with payload:', rest);
+// ipcMain.handle('send-scheduled-email', async (event, payload) => {
+//   const { html, ...rest } = payload;
+//   console.log('📤 [Logging only] Would schedule email with payload:', rest);
 
   // console.log('📅 Scheduling email:', payload);
 
   // try {
   //   const response = await axios.post(
-  //     'https://hd1b1k93od.execute-api.us-east-1.amazonaws.com/mailchimp',
+  //     'URL_HERE',
   //     {
   //       ...payload,
   //       isTest: false,
@@ -1264,7 +1422,7 @@ ipcMain.handle('send-scheduled-email', async (event, payload) => {
   //     data: null,
   //   };
   // }
-});
+// });
 
 // ipcMain.on('update-signup-prompt', async (_event, contentToSend: string) => {
 //   console.log('📥 Got contentToSend from renderer:', contentToSend);
