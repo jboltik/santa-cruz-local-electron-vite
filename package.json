@@ -1,8 +1,8 @@
 {
-  "name": "craft-industry-workflow",
-  "productName": "Craft Industry Insider Newsletter Workflow",
+  "name": "santa-cruz-local-newsletter-workflow",
+  "productName": "Santa Cruz Local Newsletter Workflow",
   "version": "1.0.0",
-  "description": "A workflow app for producting the Craft Industry Insider Newsletter",
+  "description": "A workflow app for producting the Santa Cruz Local Newsletter",
   "main": ".vite/build/main.js",
   "scripts": {
     "start": "electron-forge start",

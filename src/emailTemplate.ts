@@ -2,7 +2,7 @@ const emailTemplate: string = `
 <!doctype html>
     <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
     <head>
-    <title>Craft Industry Insider</title>
+    <title>Santa Cruz Local</title>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark">
@@ -511,7 +511,7 @@ const emailTemplate: string = `
                                                 </tr>
                                                 <tr>
                                                     <td align="center" style="font-size: 12px;line-height: 140%;font-family: Source Sans Pro,helvetica,arial,sans-serif;color: #ffffff;padding: 2px 10px;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;">
-                                                        <span style="color:#ffffff;" class="appleLinks"><b>Want to change how you receive these emails?</b><br><a style="color: #ffffff;text-decoration: underline;font-weight: 400;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" href="*|UNSUB|*">Unsubscribe</a> from the <b>Craft Industry Insider</b> newsletter<br></span><br><br>
+                                                        <span style="color:#ffffff;" class="appleLinks"><b>Want to change how you receive these emails?</b><br><a style="color: #ffffff;text-decoration: underline;font-weight: 400;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" href="*|UNSUB|*">Unsubscribe</a> from the <b>Santa Cruz Local</b> newsletter<br></span><br><br>
                                                         <span style="color:#ffffff;font-size:11px; line-height:140%; font-family:Source Sans Pro,helvetica,arial,sans-serif;" class="appleLinks">
                                                             Copyright &copy; *|CURRENT_YEAR|* Craft Industry Alliance, LLC<br>
                                                             Craft Industry Alliance

@@ -4,32 +4,37 @@ import emailTemplate from './emailTemplate';
 import { html as cmHtml } from '@codemirror/lang-html';
 import { keymap } from '@codemirror/view';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search';
-import { EditorView, ViewPlugin, Decoration, DecorationSet, MatchDecorator, ViewUpdate } from '@codemirror/view';
+import {
+  search,
+  searchKeymap,
+  highlightSelectionMatches,
+} from '@codemirror/search';
+import {
+  EditorView,
+  ViewPlugin,
+  Decoration,
+  DecorationSet,
+  MatchDecorator,
+  ViewUpdate,
+} from '@codemirror/view';
 import CodeMirror from '@uiw/react-codemirror';
 import { codeViewExtensions } from './editor/codeViewTheme';
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 import CreateCampaignButton from './components/CreateCampaignButton';
 
-
 const LOCAL_STORAGE_KEY_SIGNUP_PROMPT = 'signupPromptHtmlContent';
-
-
 
 // build once (outside the component or with useMemo inside)
 const CM_EXT = codeViewExtensions({
   tagTeal: '#0093ac',
   styleGray: '#9aa0a6',
-  mcGray: '#aeb4bb',   // slightly different gray
+  mcGray: '#aeb4bb', // slightly different gray
   linkLight: '#6ea8fe', // lighter blue for href="…"
-  linkDark: '#0a58ca',  // darker blue for URL inside quotes
+  linkDark: '#0a58ca', // darker blue for URL inside quotes
   genericAttrGray: '#9aa0a6', // same as styleGray for target/align/valign
   nbsp: '#6fb1b8', // teal-ish for &nbsp;
 });
-
-
-
 
 const generateTimeOptions = () => {
   const options: string[] = [];
@@ -44,25 +49,25 @@ const generateTimeOptions = () => {
   return options;
 };
 
-
 // helpers
 const applyPattern = (pattern: string, brand: string, m: moment.Moment) =>
   pattern
     .replace('{brand}', brand)
     .replace('{MMMM}', m.format('MMMM'))
-    .replace('{MMM}',  m.format('MMM'))
+    .replace('{MMM}', m.format('MMM'))
     .replace('{YYYY}', m.format('YYYY'))
-    .replace('{YY}',   m.format('YY'));
+    .replace('{YY}', m.format('YY'));
 
-const computeDateFromScheduleOrNow = (scheduleDate?: string, scheduleTime?: string) => {
+const computeDateFromScheduleOrNow = (
+  scheduleDate?: string,
+  scheduleTime?: string
+) => {
   if (scheduleDate && scheduleTime) {
     // use local time zone (simplest); or swap in tz() if you want a fixed zone
     return moment(`${scheduleDate}T${scheduleTime}`);
   }
   return moment(); // now (local)
 };
-
-
 
 // 🧪 Debug Electron preload injection
 console.log('🤖 electron object:', window.electron);
@@ -80,21 +85,25 @@ const App = () => {
   const [campaignName, setCampaignName] = useState('');
   const [userEditedCampaign, setUserEditedCampaign] = useState(false);
   const [autoCampaignEnabled, setAutoCampaignEnabled] = useState(true);
-  const [autoCampaignPattern, setAutoCampaignPattern] = useState('{brand} {MMMM} {YYYY}');
-  const [brand, setBrand] = useState('Craft Industry Insider'); // optional
+  const [autoCampaignPattern, setAutoCampaignPattern] = useState(
+    '{brand} {MMMM} {YYYY}'
+  );
+  const [brand, setBrand] = useState('Santa Cruz Local'); // optional
   const [hasUploadedZip, setHasUploadedZip] = useState(
     () => sessionStorage.getItem('hasUploadedZip') === 'true'
   );
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   const shouldFlashUpload = isProcessingUpload || !hasUploadedZip;
   const [senderFromName, setSenderFromName] = useState('Grace Dobush');
-  const [senderFromEmail, setSenderFromEmail] = useState('insider@craftindustryalliance.org');
+  const [senderFromEmail, setSenderFromEmail] = useState(
+    'insider@craftindustryalliance.org'
+  );
 
   const [linkResults, setLinkResults] = useState<
     { link: string; status: string }[]
   >([]);
 
-const [linkCheckerEnabled, setLinkCheckerEnabled] = useState(true);
+  const [linkCheckerEnabled, setLinkCheckerEnabled] = useState(true);
 
   const cmViewRef = useRef<EditorView | null>(null);
   // Lightweight outline of headings
@@ -128,9 +137,6 @@ const [linkCheckerEnabled, setLinkCheckerEnabled] = useState(true);
   // Menu popup for default insert for signup CTA
   const [showSignupPromptEditor, setShowSignupPromptEditor] = useState(false);
 
- 
-
-
   // Feedback on buttons
   const [testStatus, setTestStatus] = useState<
     'idle' | 'loading' | 'success' | 'error'
@@ -138,7 +144,6 @@ const [linkCheckerEnabled, setLinkCheckerEnabled] = useState(true);
   const [testMessage, setTestMessage] = useState<string | null>(null);
 
   const [showLinkErrors, setShowLinkErrors] = useState(true);
-
 
   const [isTestButtonDisabled, setIsTestButtonDisabled] = useState(false);
   const [isSendNowButtonDisabled, setIsSendNowButtonDisabled] = useState(false);
@@ -153,148 +158,161 @@ const [linkCheckerEnabled, setLinkCheckerEnabled] = useState(true);
     null
   );
 
- const [signupPromptHtmlContent, setSignupPromptHtmlContent] = useState('');
+  const [signupPromptHtmlContent, setSignupPromptHtmlContent] = useState('');
 
   const [userEditedSubject, setUserEditedSubject] = useState(false);
   const userEditedSubjectRef = useRef(userEditedSubject);
 
-const sanitizeFilename = (s: string) =>
-  (s || 'newsletter')
-    .trim()
-    .replace(/[^\w.-]+/g, '_')
-    .replace(/^_+|_+$/g, '');
+  const sanitizeFilename = (s: string) =>
+    (s || 'newsletter')
+      .trim()
+      .replace(/[^\w.-]+/g, '_')
+      .replace(/^_+|_+$/g, '');
 
-const handleDownloadFinalHtml = async () => {
-  if (!finalHtml) return;
-  setIsSavingFinal(true);
-  try {
-    const defaultName = sanitizeFilename(campaignName || subject || 'newsletter');
-    const res = await window.electron.saveHtmlToDisk({
-      html: finalHtml,
-      defaultName,
-    });
-    if (res?.ok) {
-      alert(`✅ Saved: ${res.filePath}`);
-    } else {
-      alert('❌ Failed to save HTML.');
-    }
-  } finally {
-    setIsSavingFinal(false);
-  }
-};
-
-
-useEffect(() => {
-  window.settings.get().then((s) => {
-    if (s.linkCheckerEnabled !== undefined) {
-      setLinkCheckerEnabled(s.linkCheckerEnabled);
-    }
-  });
-}, []);
-
-const toggleLinkChecker = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const newVal = e.target.checked;
-  setLinkCheckerEnabled(newVal);
-  window.settings.update({ linkCheckerEnabled: newVal });
-};
-
-
-
-// (optional) default to OS preference
-useEffect(() => {
-  const mql = window.matchMedia?.('(prefers-color-scheme: dark)');
-  if (!mql) return;
-  setDarkMode(mql.matches);
-  const handler = (e: MediaQueryListEvent) => setDarkMode(e.matches);
-  mql.addEventListener?.('change', handler);
-  return () => mql.removeEventListener?.('change', handler);
-}, []);
-
-// Build extensions *based on* dark mode
-const CM_EXT = React.useMemo(() => codeViewExtensions({
-  tagTeal:   '#00a7be',                 // slight bump for contrast on dark
-  styleGray: darkMode ? '#b8c0cc' : '#9aa0a6',
-  mcGray:    darkMode ? '#c3c9d1' : '#aeb4bb',
-  linkLight: darkMode ? '#9cc0ff' : '#6ea8fe',
-  linkDark:  darkMode ? '#6b93f0' : '#0a58ca',
-  nbsp:      darkMode ? '#8fd3da' : '#6fb1b8',
-}), [darkMode]);
-
-const brightContent = React.useMemo(
-  () =>
-    syntaxHighlighting(
-      HighlightStyle.define([
-        // text between tags
-        { tag: t.content, color: '#eef2f7' }, // or '#f3f4f6'
-      ]),
-      { fallback: true }
-    ),
-  []
-);
-
-
-// Add a tiny base theme so editor chrome matches dark mode nicely
-const chromeTheme = React.useMemo(
-  () => EditorView.theme(
-      darkMode
-        ? {
-            '&': { backgroundColor: '#0f111a' },
-
-            // ⬅︎ new: make default/plain text near-white on dark
-            '.cm-content, .cm-line': { color: '#eef2f7' }, // or '#f3f4f6'
-
-            '.cm-content': { caretColor: '#ffffff' },
-            '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
-              backgroundColor: '#2a2f45',
-            },
-            '.cm-gutters': { backgroundColor: '#0f111a', color: '#8b90a0', border: 'none' },
-          }
-        : {
-            '&': { backgroundColor: '#ffffff', color: '#111827' },
-            '.cm-gutters': { backgroundColor: '#ffffff', color: '#6b7280', border: 'none' },
-          },
-      { dark: darkMode }
-    ),
-  [darkMode]
-);
-
-
-
-useEffect(() => {
-  (async () => {
-    const s = await window.settings.get();
-    // populate toggles/pattern/brand so the UI knows current defaults
-    setAutoCampaignEnabled(s.autoCampaignEnabled ?? true);
-    setAutoCampaignPattern(s.autoCampaignPattern ?? '{brand} {MMMM} {YYYY}');
-    setBrand(s.brand ?? 'Craft Industry Insider');
-
-    // if a specific name was previously saved, keep it
-    if (s.campaignName) {
-      setCampaignName(s.campaignName);
-      setUserEditedCampaign(true); // prevents auto-regeneration from overwriting
-    } else if (s.autoCampaignEnabled ?? true) {
-      const d = computeDateFromScheduleOrNow(scheduleDate, scheduleTime);
-      setCampaignName(
-        applyPattern(
-          s.autoCampaignPattern ?? '{brand} {MMMM} {YYYY}',
-          s.brand ?? 'Craft Industry Insider',
-          d
-        )
+  const handleDownloadFinalHtml = async () => {
+    if (!finalHtml) return;
+    setIsSavingFinal(true);
+    try {
+      const defaultName = sanitizeFilename(
+        campaignName || subject || 'newsletter'
       );
+      const res = await window.electron.saveHtmlToDisk({
+        html: finalHtml,
+        defaultName,
+      });
+      if (res?.ok) {
+        alert(`✅ Saved: ${res.filePath}`);
+      } else {
+        alert('❌ Failed to save HTML.');
+      }
+    } finally {
+      setIsSavingFinal(false);
     }
-  })();
-}, []); // run once on mount
+  };
 
-useEffect(() => {
-  if (!autoCampaignEnabled || userEditedCampaign) return;
+  useEffect(() => {
+    window.settings.get().then((s) => {
+      if (s.linkCheckerEnabled !== undefined) {
+        setLinkCheckerEnabled(s.linkCheckerEnabled);
+      }
+    });
+  }, []);
 
-  const d = computeDateFromScheduleOrNow(scheduleDate, scheduleTime);
-  setCampaignName(applyPattern(autoCampaignPattern, brand, d));
-}, [scheduleDate, scheduleTime, autoCampaignEnabled, userEditedCampaign, autoCampaignPattern, brand]);
+  const toggleLinkChecker = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVal = e.target.checked;
+    setLinkCheckerEnabled(newVal);
+    window.settings.update({ linkCheckerEnabled: newVal });
+  };
 
+  // (optional) default to OS preference
+  useEffect(() => {
+    const mql = window.matchMedia?.('(prefers-color-scheme: dark)');
+    if (!mql) return;
+    setDarkMode(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setDarkMode(e.matches);
+    mql.addEventListener?.('change', handler);
+    return () => mql.removeEventListener?.('change', handler);
+  }, []);
 
+  // Build extensions *based on* dark mode
+  const CM_EXT = React.useMemo(
+    () =>
+      codeViewExtensions({
+        tagTeal: '#00a7be', // slight bump for contrast on dark
+        styleGray: darkMode ? '#b8c0cc' : '#9aa0a6',
+        mcGray: darkMode ? '#c3c9d1' : '#aeb4bb',
+        linkLight: darkMode ? '#9cc0ff' : '#6ea8fe',
+        linkDark: darkMode ? '#6b93f0' : '#0a58ca',
+        nbsp: darkMode ? '#8fd3da' : '#6fb1b8',
+      }),
+    [darkMode]
+  );
 
+  const brightContent = React.useMemo(
+    () =>
+      syntaxHighlighting(
+        HighlightStyle.define([
+          // text between tags
+          { tag: t.content, color: '#eef2f7' }, // or '#f3f4f6'
+        ]),
+        { fallback: true }
+      ),
+    []
+  );
 
+  // Add a tiny base theme so editor chrome matches dark mode nicely
+  const chromeTheme = React.useMemo(
+    () =>
+      EditorView.theme(
+        darkMode
+          ? {
+              '&': { backgroundColor: '#0f111a' },
+
+              // ⬅︎ new: make default/plain text near-white on dark
+              '.cm-content, .cm-line': { color: '#eef2f7' }, // or '#f3f4f6'
+
+              '.cm-content': { caretColor: '#ffffff' },
+              '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection':
+                {
+                  backgroundColor: '#2a2f45',
+                },
+              '.cm-gutters': {
+                backgroundColor: '#0f111a',
+                color: '#8b90a0',
+                border: 'none',
+              },
+            }
+          : {
+              '&': { backgroundColor: '#ffffff', color: '#111827' },
+              '.cm-gutters': {
+                backgroundColor: '#ffffff',
+                color: '#6b7280',
+                border: 'none',
+              },
+            },
+        { dark: darkMode }
+      ),
+    [darkMode]
+  );
+
+  useEffect(() => {
+    (async () => {
+      const s = await window.settings.get();
+      // populate toggles/pattern/brand so the UI knows current defaults
+      setAutoCampaignEnabled(s.autoCampaignEnabled ?? true);
+      setAutoCampaignPattern(s.autoCampaignPattern ?? '{brand} {MMMM} {YYYY}');
+      setBrand(s.brand ?? 'Santa Cruz Local');
+
+      // if a specific name was previously saved, keep it
+      if (s.campaignName) {
+        setCampaignName(s.campaignName);
+        setUserEditedCampaign(true); // prevents auto-regeneration from overwriting
+      } else if (s.autoCampaignEnabled ?? true) {
+        const d = computeDateFromScheduleOrNow(scheduleDate, scheduleTime);
+        setCampaignName(
+          applyPattern(
+            s.autoCampaignPattern ?? '{brand} {MMMM} {YYYY}',
+            s.brand ?? 'Santa Cruz Local',
+            d
+          )
+        );
+      }
+    })();
+  }, []); // run once on mount
+
+  useEffect(() => {
+    if (!autoCampaignEnabled || userEditedCampaign) return;
+
+    const d = computeDateFromScheduleOrNow(scheduleDate, scheduleTime);
+    setCampaignName(applyPattern(autoCampaignPattern, brand, d));
+  }, [
+    scheduleDate,
+    scheduleTime,
+    autoCampaignEnabled,
+    userEditedCampaign,
+    autoCampaignPattern,
+    brand,
+  ]);
 
   useEffect(() => {
     window.electron.ipcRenderer.on(
@@ -326,47 +344,42 @@ useEffect(() => {
   //   );
   // }, [signupPromptHtmlContent]);
 
+  useEffect(() => {
+    const handleCanceled = () => setIsProcessingUpload(false);
+    const handleFailed = (msg: string) => {
+      setIsProcessingUpload(false);
+      alert(`Upload failed: ${msg}`);
+    };
 
-useEffect(() => {
-  const handleCanceled = () => setIsProcessingUpload(false);
-  const handleFailed = (msg: string) => {
-    setIsProcessingUpload(false);
-    alert(`Upload failed: ${msg}`);
-  };
+    window.electron.onUploadZipCanceled(handleCanceled);
+    window.electron.onUploadZipFailed(handleFailed);
 
-  window.electron.onUploadZipCanceled(handleCanceled);
-  window.electron.onUploadZipFailed(handleFailed);
+    return () => {
+      // remove by channel name using the exposed ipcRenderer
+      window.electron.ipcRenderer.removeAllListeners('upload-zip-canceled');
+      window.electron.ipcRenderer.removeAllListeners('upload-zip-failed');
+    };
+  }, []);
 
-  return () => {
-    // remove by channel name using the exposed ipcRenderer
-    window.electron.ipcRenderer.removeAllListeners('upload-zip-canceled');
-    window.electron.ipcRenderer.removeAllListeners('upload-zip-failed');
-  };
-}, []);
+  useEffect(() => {
+    (async () => {
+      try {
+        const html = await window.electron.getSignupPrompt();
+        // Trust main: it already returns saved value or the real default
+        setSignupPromptHtmlContent(html);
+      } catch {
+        // As a last resort, at least don't blank it out
+        const cached = localStorage.getItem(LOCAL_STORAGE_KEY_SIGNUP_PROMPT);
+        if (cached && cached.trim()) setSignupPromptHtmlContent(cached);
+      }
+    })();
+  }, []);
 
-
-
-useEffect(() => {
-  (async () => {
-    try {
-      const html = await window.electron.getSignupPrompt();
-      // Trust main: it already returns saved value or the real default
-      setSignupPromptHtmlContent(html);
-    } catch {
-      // As a last resort, at least don't blank it out
-      const cached = localStorage.getItem(LOCAL_STORAGE_KEY_SIGNUP_PROMPT);
-      if (cached && cached.trim()) setSignupPromptHtmlContent(cached);
-    }
-  })();
-}, []);
-
-useEffect(() => {
-  const cb = (html: string) => setSignupPromptHtmlContent(html);
-  window.electron.onSignupPromptUpdated(cb);
-  return () => window.electron.removeSignupPromptListener();
-}, []);
-
-
+  useEffect(() => {
+    const cb = (html: string) => setSignupPromptHtmlContent(html);
+    window.electron.onSignupPromptUpdated(cb);
+    return () => window.electron.removeSignupPromptListener();
+  }, []);
 
   // Function to handle welcome message  HTML content changes (e.g., from a textarea)
   const handleSignupPromptContentChange = (
@@ -375,117 +388,115 @@ useEffect(() => {
     setSignupPromptHtmlContent(event.target.value);
   };
 
-const saveSignupPromptToLocalStorage = async () => {
-  const html = signupPromptHtmlContent?.trim();
-  if (!html) {
-    alert('Tipline content is empty — not saving.');
-    return;
-  }
-  localStorage.setItem(LOCAL_STORAGE_KEY_SIGNUP_PROMPT, html);
-  await window.electron.setSignupPrompt(html);
-  alert('Tipline edit saved');
-};
-
-const resetToDefault = async () => {
-  await window.electron.resetSignupPrompt();   // call the new handler
-  // UI will update from the 'signup-prompt:updated' event
-};
-
-
-const upsertTiplineBeforeSecondH2 = (html: string, tipHtml: string) => {
-  const START = '<!--TIPLINE_START-->';
-  const END   = '<!--TIPLINE_END-->';
-  const re = new RegExp(`${START}[\\s\\S]*?${END}`, 'i');
-
-  // If empty, remove existing block (if present) and return
-  if (!tipHtml?.trim()) {
-    return html.replace(re, '');
-  }
-
-  // Replace in-place if found
-  if (re.test(html)) {
-    return html.replace(re, `${START}${tipHtml}${END}`);
-  }
-
-  // Otherwise insert before 2nd <h2> (your rule)
-  try {
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = html;
-
-    const h2s = wrapper.querySelectorAll('h2');
-    const holder = document.createElement('div');
-    holder.innerHTML = `${START}${tipHtml}${END}`;
-
-    if (h2s.length >= 2) {
-      h2s[1].parentNode?.insertBefore(holder, h2s[1]);
-    } else if (h2s.length === 1) {
-      h2s[0].after(holder);
-    } else {
-      const h3 = wrapper.querySelector('h3');
-      if (h3) h3.parentNode?.insertBefore(holder, h3);
-      else wrapper.prepend(holder);
+  const saveSignupPromptToLocalStorage = async () => {
+    const html = signupPromptHtmlContent?.trim();
+    if (!html) {
+      alert('Tipline content is empty — not saving.');
+      return;
     }
-    return wrapper.innerHTML;
-  } catch {
-    let count = 0;
-    return html.replace(/<h2\b/gi, (m) => (++count === 2 ? `${START}${tipHtml}${END}${m}` : m));
-  }
-};
-
-
-
-useEffect(() => {
-  const handleProcessed = (
-    bodyHtml: string,
-    previewTextFromMain: string,
-    subjectFromH1: string,
-    finalHtmlFromMain: string,
-    linkResultsFromMain: { link: string; status: string | number }[]
-  ) => {
-    // LEFT editor shows the body-only converted html
-    setProcessedHtml(bodyHtml);
-    setRawHtml(bodyHtml);
-
-    // RIGHT preview shows full template html
-    setFinalHtml(finalHtmlFromMain);
-
-    // For sending / downloading we want the FULL html by default
-    setSavedHtml(finalHtmlFromMain);
-
-    // preview text + subject defaults
-    setPreviewText(previewTextFromMain);
-    setSavedPreviewText(previewTextFromMain);
-
-    // if (!userEditedSubject && subjectFromH1) {
-    if (!userEditedSubjectRef.current && subjectFromH1) {
-      setSubject(subjectFromH1);
-      setSavedSubject(subjectFromH1);
-    }
-
-    // links
-    if (Array.isArray(linkResultsFromMain)) {
-      setLinkResults(
-        linkResultsFromMain.map(({ link, status }) => ({
-          link,
-          status: String(status),
-        }))
-      );
-    } else {
-      setLinkResults([]);
-    }
-
-    setHasUploadedZip(true);
-    sessionStorage.setItem('hasUploadedZip', 'true');
-    setIsProcessingUpload(false);
-    setHasChanges(false);
+    localStorage.setItem(LOCAL_STORAGE_KEY_SIGNUP_PROMPT, html);
+    await window.electron.setSignupPrompt(html);
+    alert('Tipline edit saved');
   };
 
-  // Subscribe…
- const off = window.electron.onHtmlFileProcessed(handleProcessed);
-  // …and unsubscribe when the effect re-runs or component unmounts
-  return off;
-}, []);
+  const resetToDefault = async () => {
+    await window.electron.resetSignupPrompt(); // call the new handler
+    // UI will update from the 'signup-prompt:updated' event
+  };
 
+  const upsertTiplineBeforeSecondH2 = (html: string, tipHtml: string) => {
+    const START = '<!--TIPLINE_START-->';
+    const END = '<!--TIPLINE_END-->';
+    const re = new RegExp(`${START}[\\s\\S]*?${END}`, 'i');
+
+    // If empty, remove existing block (if present) and return
+    if (!tipHtml?.trim()) {
+      return html.replace(re, '');
+    }
+
+    // Replace in-place if found
+    if (re.test(html)) {
+      return html.replace(re, `${START}${tipHtml}${END}`);
+    }
+
+    // Otherwise insert before 2nd <h2> (your rule)
+    try {
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = html;
+
+      const h2s = wrapper.querySelectorAll('h2');
+      const holder = document.createElement('div');
+      holder.innerHTML = `${START}${tipHtml}${END}`;
+
+      if (h2s.length >= 2) {
+        h2s[1].parentNode?.insertBefore(holder, h2s[1]);
+      } else if (h2s.length === 1) {
+        h2s[0].after(holder);
+      } else {
+        const h3 = wrapper.querySelector('h3');
+        if (h3) h3.parentNode?.insertBefore(holder, h3);
+        else wrapper.prepend(holder);
+      }
+      return wrapper.innerHTML;
+    } catch {
+      let count = 0;
+      return html.replace(/<h2\b/gi, (m) =>
+        ++count === 2 ? `${START}${tipHtml}${END}${m}` : m
+      );
+    }
+  };
+
+  useEffect(() => {
+    const handleProcessed = (
+      bodyHtml: string,
+      previewTextFromMain: string,
+      subjectFromH1: string,
+      finalHtmlFromMain: string,
+      linkResultsFromMain: { link: string; status: string | number }[]
+    ) => {
+      // LEFT editor shows the body-only converted html
+      setProcessedHtml(bodyHtml);
+      setRawHtml(bodyHtml);
+
+      // RIGHT preview shows full template html
+      setFinalHtml(finalHtmlFromMain);
+
+      // For sending / downloading we want the FULL html by default
+      setSavedHtml(finalHtmlFromMain);
+
+      // preview text + subject defaults
+      setPreviewText(previewTextFromMain);
+      setSavedPreviewText(previewTextFromMain);
+
+      // if (!userEditedSubject && subjectFromH1) {
+      if (!userEditedSubjectRef.current && subjectFromH1) {
+        setSubject(subjectFromH1);
+        setSavedSubject(subjectFromH1);
+      }
+
+      // links
+      if (Array.isArray(linkResultsFromMain)) {
+        setLinkResults(
+          linkResultsFromMain.map(({ link, status }) => ({
+            link,
+            status: String(status),
+          }))
+        );
+      } else {
+        setLinkResults([]);
+      }
+
+      setHasUploadedZip(true);
+      sessionStorage.setItem('hasUploadedZip', 'true');
+      setIsProcessingUpload(false);
+      setHasChanges(false);
+    };
+
+    // Subscribe…
+    const off = window.electron.onHtmlFileProcessed(handleProcessed);
+    // …and unsubscribe when the effect re-runs or component unmounts
+    return off;
+  }, []);
 
   // useEffect(() => {
   //   if (!processedHtml) return;
@@ -537,13 +548,13 @@ useEffect(() => {
     );
   };
 
- useEffect(() => {
-   userEditedSubjectRef.current = userEditedSubject;
- }, [userEditedSubject]);
+  useEffect(() => {
+    userEditedSubjectRef.current = userEditedSubject;
+  }, [userEditedSubject]);
 
   const handleSubjectChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newSubject = e.target.value;
-    setUserEditedSubject(true); 
+    setUserEditedSubject(true);
     userEditedSubjectRef.current = true;
     setSubject(newSubject);
 
@@ -554,7 +565,6 @@ useEffect(() => {
         previewText !== savedPreviewText
     );
   };
-
 
   const handlePreviewTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newPreviewText = e.target.value;
@@ -577,7 +587,6 @@ useEffect(() => {
     // persist
     window.settings.update({ campaignName: newCampaignName });
   };
-
 
   const handleSenderFromNameChange = (
     e: React.ChangeEvent<HTMLInputElement>
@@ -632,27 +641,28 @@ useEffect(() => {
   // };
 
   const handleSaveChanges = () => {
-  // Take the editor body, ensure tipline is present & up-to-date
-  const bodyWithTip = upsertTiplineBeforeSecondH2(rawHtml, signupPromptHtmlContent);
+    // Take the editor body, ensure tipline is present & up-to-date
+    const bodyWithTip = upsertTiplineBeforeSecondH2(
+      rawHtml,
+      signupPromptHtmlContent
+    );
 
-  setProcessedHtml(bodyWithTip);
+    setProcessedHtml(bodyWithTip);
 
-  const recomposed = emailTemplate
-    .replace('{{INSERTED_PREVIEW_TEXT}}', previewText || '')
-    .replace('{{INSERTED_HTML}}', bodyWithTip);
+    const recomposed = emailTemplate
+      .replace('{{INSERTED_PREVIEW_TEXT}}', previewText || '')
+      .replace('{{INSERTED_HTML}}', bodyWithTip);
 
-  setFinalHtml(recomposed);
-  setSavedHtml(recomposed);
-  setSavedSubject(subject);
-  setSavedPreviewText(previewText);
-  setSavedCampaignName(campaignName);
-  setSavedSenderFromName(senderFromName);
-  setSavedSenderFromEmail(senderFromEmail);
-  setHasChanges(false);
-  console.log('Changes saved (full HTML refreshed)');
-};
-
-
+    setFinalHtml(recomposed);
+    setSavedHtml(recomposed);
+    setSavedSubject(subject);
+    setSavedPreviewText(previewText);
+    setSavedCampaignName(campaignName);
+    setSavedSenderFromName(senderFromName);
+    setSavedSenderFromEmail(senderFromEmail);
+    setHasChanges(false);
+    console.log('Changes saved (full HTML refreshed)');
+  };
 
   // ✅ Handle Search Functionality
   const handleSearch = () => {
@@ -677,7 +687,6 @@ useEffect(() => {
       handleSearch();
     }
   };
-
 
   // Handle Scheduling
   const handleSchedule = (e: React.FormEvent) => {
@@ -767,7 +776,6 @@ useEffect(() => {
       setScheduleSendMessage(null);
     }, 5000);
   };
-
 
   const handleSendTest = async () => {
     if (isTestButtonDisabled) return;
@@ -890,9 +898,7 @@ useEffect(() => {
         // const campaignsUrl = 'https://us9.admin.mailchimp.com/campaigns/';
         // const campaignDraftUrl = `https://us10.admin.mailchimp.com/campaigns/edit?id=${campaignId}`
 
-        alert(
-          `✅ Draft Created :)\n\nCampaign ID: ${campaignId}\n\n`
-        );
+        alert(`✅ Draft Created :)\n\nCampaign ID: ${campaignId}\n\n`);
 
         // alert(
         //   `✅ Email sent immediately!\n\nCampaign ID: ${campaignId}\n\n` +
@@ -926,205 +932,207 @@ useEffect(() => {
   };
 
   // Decide why the button is disabled (if at all)
-const downloadDisableReason =
-  !hasUploadedZip
+  const downloadDisableReason = !hasUploadedZip
     ? 'To download HTML, first upload a ZIP file.'
     : isProcessingUpload
-    ? 'Processing uploaded content…'
-    : !finalHtml
-    ? 'HTML not ready'
-    : hasChanges
-    ? 'Save changes first so preview & download match'
-    : isSavingFinal
-    ? 'Saving…'
-    : undefined;
+      ? 'Processing uploaded content…'
+      : !finalHtml
+        ? 'HTML not ready'
+        : hasChanges
+          ? 'Save changes first so preview & download match'
+          : isSavingFinal
+            ? 'Saving…'
+            : undefined;
 
-const isDownloadDisabled = Boolean(downloadDisableReason);
+  const isDownloadDisabled = Boolean(downloadDisableReason);
 
-// Styles
-const downloadBaseStyle: React.CSSProperties = {
-  padding: '10px 20px',
-  borderRadius: '5px',
-  border: 'none',
-  marginLeft: '15px',
-  transition: 'filter 120ms ease, opacity 120ms ease',
-};
+  // Styles
+  const downloadBaseStyle: React.CSSProperties = {
+    padding: '10px 20px',
+    borderRadius: '5px',
+    border: 'none',
+    marginLeft: '15px',
+    transition: 'filter 120ms ease, opacity 120ms ease',
+  };
 
-const downloadEnabledStyle: React.CSSProperties = {
-  backgroundColor: '#4caf50',
-  color: 'white',
-  cursor: 'pointer',
-  boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
-};
+  const downloadEnabledStyle: React.CSSProperties = {
+    backgroundColor: '#4caf50',
+    color: 'white',
+    cursor: 'pointer',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+  };
 
-const downloadDisabledStyle: React.CSSProperties = {
-  backgroundColor: '#e6e6e6', // more muted than #ccc
-  color: '#8a8a8a',
-  border: '1px solid #d7d7d7',
-  cursor: 'not-allowed',
-  opacity: 0.6,
-  filter: 'grayscale(60%) saturate(60%)',
-};
+  const downloadDisabledStyle: React.CSSProperties = {
+    backgroundColor: '#e6e6e6', // more muted than #ccc
+    color: '#8a8a8a',
+    border: '1px solid #d7d7d7',
+    cursor: 'not-allowed',
+    opacity: 0.6,
+    filter: 'grayscale(60%) saturate(60%)',
+  };
 
-function buildOutlineFromHtml(src: string): OutlineItem[] {
-  const items: OutlineItem[] = [];
-  const re = /<(h[1-6])\b[^>]*>([\s\S]*?)<\/\1>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(src))) {
-    const level = Number(m[1].slice(1));
-    const raw = m[2]
-      .replace(/<[^>]+>/g, '')  // strip tags
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (raw) items.push({ level, text: raw, index: m.index });
+  function buildOutlineFromHtml(src: string): OutlineItem[] {
+    const items: OutlineItem[] = [];
+    const re = /<(h[1-6])\b[^>]*>([\s\S]*?)<\/\1>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(src))) {
+      const level = Number(m[1].slice(1));
+      const raw = m[2]
+        .replace(/<[^>]+>/g, '') // strip tags
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (raw) items.push({ level, text: raw, index: m.index });
+    }
+    return items;
   }
-  return items;
-}
 
+  useEffect(() => {
+    setOutline(buildOutlineFromHtml(rawHtml));
+  }, [rawHtml]);
 
+  // Format HTML in the editor using Prettier
+  const formatHtmlInEditor = React.useCallback(async () => {
+    try {
+      // Dynamically import Prettier and the HTML plugin
+      const [{ default: prettier }, htmlMod] = await Promise.all([
+        import('prettier/standalone'),
+        import('prettier/plugins/html'),
+      ]);
+      const htmlPlugin = (htmlMod as any).default ?? htmlMod;
 
-useEffect(() => {
-  setOutline(buildOutlineFromHtml(rawHtml));
-}, [rawHtml]);
+      // Preserve selection & scroll so formatting feels seamless
+      const view = cmViewRef.current;
+      const sel = view?.state.selection;
+      const scrollTop = view?.scrollDOM.scrollTop ?? 0;
 
+      const formatted = await prettier.format(rawHtml, {
+        parser: 'html',
+        plugins: [htmlPlugin],
+        printWidth: 100,
+        tabWidth: 2,
+        useTabs: false,
+        htmlWhitespaceSensitivity: 'ignore',
+        embeddedLanguageFormatting: 'off',
+        singleAttributePerLine: true,
+        proseWrap: 'preserve',
+        endOfLine: 'lf',
+      });
+      setRawHtml(formatted);
 
+      // Restore editor selection & scroll after the re-render
+      requestAnimationFrame(() => {
+        if (view) {
+          if (sel) view.dispatch({ selection: sel });
+          view.scrollDOM.scrollTop = scrollTop;
+        }
+      });
+    } catch (e) {
+      console.error(e);
+      alert('Prettier failed to format this HTML. Check console for details.');
+    }
+  }, [rawHtml]);
 
-// Format HTML in the editor using Prettier
-const formatHtmlInEditor = React.useCallback(async () => {
-  try {
-    // Dynamically import Prettier and the HTML plugin
-    const [{ default: prettier }, htmlMod] = await Promise.all([
-      import('prettier/standalone'),
-      import('prettier/plugins/html'),
-    ]);
-    const htmlPlugin = (htmlMod as any).default ?? htmlMod;
-
-    // Preserve selection & scroll so formatting feels seamless
-    const view = cmViewRef.current;
-    const sel = view?.state.selection;
-    const scrollTop = view?.scrollDOM.scrollTop ?? 0;
-
-    const formatted = await prettier.format(rawHtml, {
-      parser: 'html',
-      plugins: [htmlPlugin],
-      printWidth: 100,
-      tabWidth: 2,
-      useTabs: false,
-      htmlWhitespaceSensitivity: 'ignore',
-      embeddedLanguageFormatting: 'off',
-      singleAttributePerLine: true,
-      proseWrap: 'preserve',
-      endOfLine: 'lf',
-    });
-    setRawHtml(formatted);
-
-    // Restore editor selection & scroll after the re-render
-    requestAnimationFrame(() => {
-      if (view) {
-        if (sel) view.dispatch({ selection: sel });
-        view.scrollDOM.scrollTop = scrollTop;
-      }
-    });
-  } catch (e) {
-    console.error(e);
-    alert('Prettier failed to format this HTML. Check console for details.');
-  }
-}, [rawHtml]);
-
-const formatKeymap = React.useMemo(
-  () =>
-    keymap.of([
-      {
-        key: 'Mod-Shift-f',
-        run: () => {
-          formatHtmlInEditor();
-          return true;
+  const formatKeymap = React.useMemo(
+    () =>
+      keymap.of([
+        {
+          key: 'Mod-Shift-f',
+          run: () => {
+            formatHtmlInEditor();
+            return true;
+          },
         },
-      },
-    ]),
-  [formatHtmlInEditor]
-);
+      ]),
+    [formatHtmlInEditor]
+  );
 
+  // ── Toolbar button styles (one height to rule them all) ───────────────────────
+  const BTN_H = 36; // px
 
-// ── Toolbar button styles (one height to rule them all) ───────────────────────
-const BTN_H = 36; // px
+  const btnBase: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: BTN_H,
+    padding: '0 14px', // unified horizontal padding
+    lineHeight: `${BTN_H}px`, // keeps text centered vertically if it wraps to inline
+    borderRadius: 5,
+    border: 'none',
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+    userSelect: 'none',
+    transition: 'filter 120ms ease, opacity 120ms ease',
+    gap: 8, // space between icon + text if you use an icon span
+  };
 
-const btnBase: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  height: BTN_H,
-  padding: '0 14px',        // unified horizontal padding
-  lineHeight: `${BTN_H}px`, // keeps text centered vertically if it wraps to inline
-  borderRadius: 5,
-  border: 'none',
-  fontSize: 14,
-  fontWeight: 600,
-  cursor: 'pointer',
-  userSelect: 'none',
-  transition: 'filter 120ms ease, opacity 120ms ease',
-  gap: 8,                   // space between icon + text if you use an icon span
-};
+  const btnNeutral: React.CSSProperties = {
+    background: '#e6e6e6',
+    color: '#111',
+  };
+  const btnPrimary: React.CSSProperties = {
+    background: '#4d63ff',
+    color: '#fff',
+  };
+  const btnSuccess: React.CSSProperties = {
+    background: '#28a745',
+    color: '#fff',
+  };
+  const btnWarn: React.CSSProperties = { background: '#ffde97', color: '#444' };
 
-const btnNeutral: React.CSSProperties = { background: '#e6e6e6', color: '#111' };
-const btnPrimary: React.CSSProperties = { background: '#4d63ff', color: '#fff' };
-const btnSuccess: React.CSSProperties = { background: '#28a745', color: '#fff' };
-const btnWarn: React.CSSProperties    = { background: '#ffde97', color: '#444' };
+  const btnDisabled: React.CSSProperties = {
+    background: '#e6e6e6',
+    color: '#8a8a8a',
+    cursor: 'not-allowed',
+    opacity: 0.6,
+    filter: 'grayscale(60%) saturate(60%)',
+  };
 
-const btnDisabled: React.CSSProperties = {
-  background: '#e6e6e6',
-  color: '#8a8a8a',
-  cursor: 'not-allowed',
-  opacity: 0.6,
-  filter: 'grayscale(60%) saturate(60%)',
-};
+  // Handy helper
+  const merge = (...objs: React.CSSProperties[]) => Object.assign({}, ...objs);
 
-// Handy helper
-const merge = (...objs: React.CSSProperties[]) => Object.assign({}, ...objs);
+  // Optional: tiny icon wrapper so emojis don’t change height
+  const Icon: React.FC<React.PropsWithChildren> = ({ children }) => (
+    <span aria-hidden style={{ display: 'inline-block', lineHeight: 1 }}>
+      {children}
+    </span>
+  );
 
-// Optional: tiny icon wrapper so emojis don’t change height
-const Icon: React.FC<React.PropsWithChildren> = ({ children }) => (
-  <span aria-hidden style={{ display: 'inline-block', lineHeight: 1 }}>
-    {children}
-  </span>
-);
+  // ── Footer button styles (a bit shorter than the toolbar)
+  const FOOTER_H = 32;
 
-// ── Footer button styles (a bit shorter than the toolbar)
-const FOOTER_H = 32;
+  const btnFooterBase: React.CSSProperties = {
+    ...btnBase,
+    height: FOOTER_H,
+    lineHeight: `${FOOTER_H}px`,
+    padding: '0 12px',
+    fontSize: 13,
+    fontWeight: 600,
+  };
 
-const btnFooterBase: React.CSSProperties = {
-  ...btnBase,
-  height: FOOTER_H,
-  lineHeight: `${FOOTER_H}px`,
-  padding: '0 12px',
-  fontSize: 13,
-  fontWeight: 600,
-};
+  const toggleWrap: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    height: BTN_H,
+    padding: '0 10px',
+    color: '#cfd3dc', // subtle label on dark bg
+    borderRadius: 5,
+    border: '1px solid rgba(255,255,255,0.08)',
+    background: 'rgba(255,255,255,0.04)',
+    whiteSpace: 'nowrap',
+  };
 
-const toggleWrap: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 8,
-  height: BTN_H,
-  padding: '0 10px',
-  color: '#cfd3dc', // subtle label on dark bg
-  borderRadius: 5,
-  border: '1px solid rgba(255,255,255,0.08)',
-  background: 'rgba(255,255,255,0.04)',
-  whiteSpace: 'nowrap',
-};
-
-const toggleCheckbox: React.CSSProperties = {
-  margin: 0,
-  width: 16,
-  height: 16,
-};
-
+  const toggleCheckbox: React.CSSProperties = {
+    margin: 0,
+    width: 16,
+    height: 16,
+  };
 
   return (
     <>
-        {/* 🔥 Flash animation keyframes */}
-    <style>{`
+      {/* 🔥 Flash animation keyframes */}
+      <style>{`
       @keyframes flash {
         0%, 100% { box-shadow: 0 0 0 rgba(255, 215, 0, 0); transform: scale(1); }
         50%      { box-shadow: 0 0 14px rgba(255, 215, 0, 0.9); transform: scale(1.03); }
@@ -1346,66 +1354,78 @@ const toggleCheckbox: React.CSSProperties = {
 
           {/* Row 2: Placeholder */}
 
-         {/* ── Top toolbar row (one flex row, three children) ─────────────── */}
-<div
-  style={{
-    padding: '0 10px 10px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 20,
-  }}
->
-  {/* Left cluster */}
-  <div style={{ display: 'flex', gap: 12 }}>
-    <button
-      onClick={handleSaveChanges}
-      disabled={!hasChanges}
-      style={merge(btnBase, hasChanges ? btnSuccess : btnDisabled)}
-    >
-      Save Changes
-    </button>
+          {/* ── Top toolbar row (one flex row, three children) ─────────────── */}
+          <div
+            style={{
+              padding: '0 10px 10px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 20,
+            }}
+          >
+            {/* Left cluster */}
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={handleSaveChanges}
+                disabled={!hasChanges}
+                style={merge(btnBase, hasChanges ? btnSuccess : btnDisabled)}
+              >
+                Save Changes
+              </button>
 
-    <button
-      onClick={() => {
-        setIsProcessingUpload(true);
-        window.electron.sendReadyToUpload();
-      }}
-      disabled={isProcessingUpload}
-      style={merge(
-        btnBase,
-        isProcessingUpload ? btnDisabled : btnNeutral,
-        shouldFlashUpload ? { animation: 'flash 1.1s ease-in-out infinite' } : {}
-      )}
-      title={shouldFlashUpload ? 'Start here: upload your Google Docs ZIP' : undefined}
-    >
-      <Icon>📤</Icon> Upload Google Doc ZIP File
-    </button>
+              <button
+                onClick={() => {
+                  setIsProcessingUpload(true);
+                  window.electron.sendReadyToUpload();
+                }}
+                disabled={isProcessingUpload}
+                style={merge(
+                  btnBase,
+                  isProcessingUpload ? btnDisabled : btnNeutral,
+                  shouldFlashUpload
+                    ? { animation: 'flash 1.1s ease-in-out infinite' }
+                    : {}
+                )}
+                title={
+                  shouldFlashUpload
+                    ? 'Start here: upload your Google Docs ZIP'
+                    : undefined
+                }
+              >
+                <Icon>📤</Icon> Upload Google Doc ZIP File
+              </button>
 
-    <button
-      onClick={handleDownloadFinalHtml}
-      disabled={isDownloadDisabled}
-      title={downloadDisableReason}
-      aria-disabled={isDownloadDisabled}
-      style={merge(btnBase, isDownloadDisabled ? btnDisabled : btnNeutral)}
-    >
-      <Icon>⬇️</Icon> {isSavingFinal ? 'Saving…' : 'Download Full HTML'}
-    </button>
-  </div>
+              <button
+                onClick={handleDownloadFinalHtml}
+                disabled={isDownloadDisabled}
+                title={downloadDisableReason}
+                aria-disabled={isDownloadDisabled}
+                style={merge(
+                  btnBase,
+                  isDownloadDisabled ? btnDisabled : btnNeutral
+                )}
+              >
+                <Icon>⬇️</Icon>{' '}
+                {isSavingFinal ? 'Saving…' : 'Download Full HTML'}
+              </button>
+            </div>
 
-  {/* Right cluster (push to the far right) */}
-  <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
-    <button
-      onClick={handleSendTest}
-      disabled={hasChanges || testStatus === 'loading'}
-      style={merge(
-        btnBase,
-        hasChanges || testStatus === 'loading' ? btnDisabled : btnPrimary
-      )}
-    >
-      {testStatus === 'loading' ? '⏳ Sending...' : 'Send Test'}
-    </button>
+            {/* Right cluster (push to the far right) */}
+            <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
+              <button
+                onClick={handleSendTest}
+                disabled={hasChanges || testStatus === 'loading'}
+                style={merge(
+                  btnBase,
+                  hasChanges || testStatus === 'loading'
+                    ? btnDisabled
+                    : btnPrimary
+                )}
+              >
+                {testStatus === 'loading' ? '⏳ Sending...' : 'Send Test'}
+              </button>
 
-    {/* <CreateCampaignButton
+              {/* <CreateCampaignButton
       isDisabled={hasChanges || isSavingFinal || !finalHtml}
       finalEmailHtml={finalEmailHtml}
       previewText={previewText}
@@ -1416,27 +1436,27 @@ const toggleCheckbox: React.CSSProperties = {
       campaignName={settings.campaignName}
     /> */}
 
-    <button
-      onClick={handleSendNow}
-      disabled={hasChanges || isNowSending}
-      style={merge(
-        btnBase,
-        hasChanges || isNowSending ? btnDisabled : btnWarn,
-        isNowSending ? { opacity: 0.8 } : {}
-      )}
-    >
-      {isNowSending ? '⏳ Creating Draft...' : 'Create Draft in MC'}
-    </button>
+              <button
+                onClick={handleSendNow}
+                disabled={hasChanges || isNowSending}
+                style={merge(
+                  btnBase,
+                  hasChanges || isNowSending ? btnDisabled : btnWarn,
+                  isNowSending ? { opacity: 0.8 } : {}
+                )}
+              >
+                {isNowSending ? '⏳ Creating Draft...' : 'Create Draft in MC'}
+              </button>
 
-    {/* <button
+              {/* <button
       onClick={handleSchedule}
       disabled={hasChanges}
       style={merge(btnBase, hasChanges ? btnDisabled : btnWarn)}
     >
       Schedule
     </button> */}
-  </div>
-</div>
+            </div>
+          </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <div
@@ -1446,74 +1466,91 @@ const toggleCheckbox: React.CSSProperties = {
                 minWidth: '620px',
               }}
             >
-
-            <CodeMirror
-              value={rawHtml}
-              height="500px"
-               theme={darkMode ? oneDark : undefined}
+              <CodeMirror
+                value={rawHtml}
+                height="500px"
+                theme={darkMode ? oneDark : undefined}
                 extensions={[
-    ...CM_EXT,
-    keymap.of([{ key: 'Mod-Shift-f', run: () => (formatHtmlInEditor(), true) }]),
-    ...(darkMode ? [brightContent] : []), 
-    chromeTheme,                         
-  ]}
-
-              onCreateEditor={(view) => (cmViewRef.current = view)}
-              onChange={(value) => {
-                setRawHtml(value);
-                // keep your existing change tracking logic:
-                setHasChanges(
-                  value !== savedHtml ||
-                  subject !== savedSubject ||
-                  previewText !== savedPreviewText
-                );
-              }}
-            />
-
-
+                  ...CM_EXT,
+                  keymap.of([
+                    {
+                      key: 'Mod-Shift-f',
+                      run: () => (formatHtmlInEditor(), true),
+                    },
+                  ]),
+                  ...(darkMode ? [brightContent] : []),
+                  chromeTheme,
+                ]}
+                onCreateEditor={(view) => (cmViewRef.current = view)}
+                onChange={(value) => {
+                  setRawHtml(value);
+                  // keep your existing change tracking logic:
+                  setHasChanges(
+                    value !== savedHtml ||
+                      subject !== savedSubject ||
+                      previewText !== savedPreviewText
+                  );
+                }}
+              />
 
               <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
-<label style={{ color: '#fff', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-  <input
-    type="checkbox"
-    checked={darkMode}
-    onChange={(e) => setDarkMode(e.target.checked)}
-    style={{ margin: 0 }}
-  />
-  Dark editor
-</label>
+                <label
+                  style={{
+                    color: '#fff',
+                    fontSize: 12,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={darkMode}
+                    onChange={(e) => setDarkMode(e.target.checked)}
+                    style={{ margin: 0 }}
+                  />
+                  Dark editor
+                </label>
 
-<button
-  onClick={formatHtmlInEditor}
-  style={merge(btnFooterBase, btnNeutral, { marginLeft: 8 })}
->
-  Format HTML
-</button>
+                <button
+                  onClick={formatHtmlInEditor}
+                  style={merge(btnFooterBase, btnNeutral, { marginLeft: 8 })}
+                >
+                  Format HTML
+                </button>
 
-<button
-  onClick={() => setShowSignupPromptEditor(true)}
-  style={merge(btnFooterBase, { background: '#9d8189', color: '#fff', marginLeft: 8 })}
->
-  <Icon>✏️</Icon> Edit Tipline Section
-</button>
+                <button
+                  onClick={() => setShowSignupPromptEditor(true)}
+                  style={merge(btnFooterBase, {
+                    background: '#9d8189',
+                    color: '#fff',
+                    marginLeft: 8,
+                  })}
+                >
+                  <Icon>✏️</Icon> Edit Tipline Section
+                </button>
 
-  {/* Settings: Enable Link Checker (moved down here) */}
-  <label style={{ color: '#cfd3dc', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 12 }}>
-    <input
-      type="checkbox"
-      checked={linkCheckerEnabled}
-      onChange={toggleLinkChecker}
-      style={{ margin: 0 }}
-    />
-    Enable Link Checker
-  </label>
-
+                {/* Settings: Enable Link Checker (moved down here) */}
+                <label
+                  style={{
+                    color: '#cfd3dc',
+                    fontSize: 12,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginLeft: 12,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={linkCheckerEnabled}
+                    onChange={toggleLinkChecker}
+                    style={{ margin: 0 }}
+                  />
+                  Enable Link Checker
+                </label>
               </div>
             </div>
-
-
-
-
 
             <div
               style={{
@@ -1675,7 +1712,6 @@ const toggleCheckbox: React.CSSProperties = {
           </div>
         </div>
       </div>
-      
       {showScheduleModal && (
         <div
           className="modal"
