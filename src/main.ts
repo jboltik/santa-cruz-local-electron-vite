@@ -14,9 +14,9 @@ import type { AppSettings } from './types/AppSettings';
 import type { ImageUploadResponse } from './types/api';
 import { CreateCampaignPayload, CreateCampaignResult } from './types/campaign';
 
-
-
 const store = new Store();
+
+const IMAGE_UPLOADS_ENABLED = false;
 
 // Example: read the auth token and endpoint
 // const authToken = store.get('authToken') as string;
@@ -42,11 +42,9 @@ function saveSettings(s: AppSettings) {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(s, null, 2), 'utf8');
 }
 
-
 let settingsCache: AppSettings = loadSettings();
 
 const DEFAULT_SIGNUP_PROMPT_HTML = `<p style="font-size: 8px;line-height: 150%;color: #202020;">&nbsp;</p><table role="presentation" style="width: 100%;max-width: 620px;margin: 0 auto;border-radius: 5px;background-color: #FDf9ED;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" cellspacing="0" cellpadding="10" align="center" width="100%" class="mobile-table" bgcolor="#FDf9ED"><tbody><tr><td align="center" valign="top" style="padding: 25px 20px 10px 20px;font-size: 36px;line-height: 125%;color: #0093ac;font-weight: normal;font-family: 'Raleway',Helvetica,Arial,Lucida,sans-serif;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;"><center>Tipline</center></td></tr><tr><td align="center" valign="top" style="padding: 0px 15px 25px 15px;color: #202020;font-weight: normal;line-height: 150%;font-size: 18px;font-family: 'Open Sans',Helvetica,Arial,Lucida,sans-serif;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;"><center>Got a confidential news tip? Drop us a line <a href="https://forms.gle/5eDFy7kJwa62H9KMA" target="_blank" style="color: #dd623c;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;text-decoration: underline;">here</a>.</center></td></tr></tbody></table><p style="font-size: 4px;line-height: 150%;">&nbsp;</p>`;
-
 
 let latestSignupPromptHtml: string | null =
   settingsCache.signupPromptHtml ?? DEFAULT_SIGNUP_PROMPT_HTML;
@@ -57,9 +55,15 @@ ipcMain.handle('signup-prompt:get', async () => {
 
 ipcMain.handle('signup-prompt:reset', async () => {
   latestSignupPromptHtml = DEFAULT_SIGNUP_PROMPT_HTML;
-  settingsCache = { ...settingsCache, signupPromptHtml: DEFAULT_SIGNUP_PROMPT_HTML };
+  settingsCache = {
+    ...settingsCache,
+    signupPromptHtml: DEFAULT_SIGNUP_PROMPT_HTML,
+  };
   saveSettings(settingsCache);
-  mainWindow?.webContents.send('signup-prompt:updated', DEFAULT_SIGNUP_PROMPT_HTML);
+  mainWindow?.webContents.send(
+    'signup-prompt:updated',
+    DEFAULT_SIGNUP_PROMPT_HTML
+  );
   return { ok: true };
 });
 
@@ -92,11 +96,7 @@ ipcMain.handle('save-html-to-disk', async (_evt, { html, defaultName }) => {
   return { ok: true, filePath };
 });
 
-
-
 let mainWindow: BrowserWindow | null = null; // Declare mainWindow in a higher scope
-
-
 
 // Function to create the main application window
 const createWindow = () => {
@@ -128,20 +128,18 @@ const createWindow = () => {
     );
   }
 
-
   // Open the DevTools detached from the window
   // console.log('🔍 Attempting to open DevTools...');
   // mainWindow.webContents.openDevTools({ mode: 'detach' });
 
   // Use on (not once) if you want the file upload to be triggerable multiple times (e.g., for “Re-Upload ZIP”).
   ipcMain.on('ready-to-upload', async () => {
-       console.log(
+    console.log(
       '📥 Renderer signaled ready-to-upload. Starting file upload...'
     );
-  if (!mainWindow) return;
-  await handleFileUpload(); // can be called repeatedly
-});
-
+    if (!mainWindow) return;
+    await handleFileUpload(); // can be called repeatedly
+  });
 
   // Handle window close event
   mainWindow.on('closed', () => {
@@ -237,7 +235,6 @@ async function handleFileUpload() {
 
     console.log(`✅ Uploaded images:`, uploadedImages);
 
-
     // Process the html file and read the content
     const htmlFile = files.find((file) => file.endsWith('.html'));
 
@@ -254,9 +251,8 @@ async function handleFileUpload() {
       );
       let htmlContent = rawHtmlContent; // use a mutable copy
 
-    
       const $ = cheerio.load(htmlContent);
-     
+
       // ✅ First extract the DESCRIPTION paragraph cleanly before removing it
       const paragraphs = $('p');
       let foundDescriptionParagraph = '';
@@ -303,11 +299,8 @@ async function handleFileUpload() {
               $link.attr('href', cleanUrl);
             }
           });
-
-
         }
       });
-
 
       htmlContent = $.html();
 
@@ -323,9 +316,6 @@ async function handleFileUpload() {
 
       // console.log('Before replacement, emailTemplate:', emailTemplate);
 
-
-  
-
       // Now process via Cheerio
       const { processedHTML, previewText, subjectFromH1, linkResults } =
         await processAndValidateHtml(htmlContent);
@@ -334,34 +324,29 @@ async function handleFileUpload() {
         previewText.split(' ').slice(0, 15).join(' ') + '...';
 
       console.log('✅ Processed HTML generated.');
-    
 
       const finalEmailHtml = emailTemplate
         .replace('{{INSERTED_PREVIEW_TEXT}}', previewTextLimited)
         .replace('{{INSERTED_HTML}}', processedHTML);
-       
+
       // console.log('📧 Final finalEmailHtml content preview (500 chars):');
       // console.log(finalEmailHtml.slice(0, 500));
-
-  
 
       const finalHtmlPath = path.join(tempExtractPath, 'final_email.html');
       fs.writeFileSync(finalHtmlPath, finalEmailHtml, 'utf8');
 
-      
       const $raw = cheerio.load(processedHTML);
-      const rawBodyHtml =
-        $raw('body').html()?.trim() || processedHTML;
+      const rawBodyHtml = $raw('body').html()?.trim() || processedHTML;
 
       // ✅ Send finalEmailHtml (with all {{}} replacements) to renderer
       mainWindow?.webContents.send(
-          'html-file-processed',
-          processedHTML,        // ← body-only (left editor)
-          previewText,          // ← full preview text (unlimited)
-          subjectFromH1,        // ← default subject
-          finalEmailHtml,       // ← FULL html w/ template (right iframe)
-          linkResults           // ← link check results
-        );
+        'html-file-processed',
+        processedHTML, // ← body-only (left editor)
+        previewText, // ← full preview text (unlimited)
+        subjectFromH1, // ← default subject
+        finalEmailHtml, // ← FULL html w/ template (right iframe)
+        linkResults // ← link check results
+      );
     } else {
       console.log('❌ No HTML file found in ZIP.');
     }
@@ -405,11 +390,11 @@ function extractClassMappings(htmlContent: string) {
   return classMappings;
 }
 
-
 // ----- Runtime guard (place above the function) -----
 function isImageUploadResponse(x: unknown): x is { publicUrl: string }[] {
-  return Array.isArray(x) && x.every(
-    (i) => i && typeof (i as any).publicUrl === 'string'
+  return (
+    Array.isArray(x) &&
+    x.every((i) => i && typeof (i as any).publicUrl === 'string')
   );
 }
 
@@ -418,6 +403,11 @@ async function uploadImageToS3(
   imagePath: string,
   retries = 3
 ): Promise<string | null> {
+  if (!IMAGE_UPLOADS_ENABLED) {
+    console.log(`🧪 DRY RUN: would upload → ${imagePath}`);
+    return null; // returning null keeps originals and prevents replacements
+  }
+
   console.log(`📡 Uploading image: ${imagePath}`);
 
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -425,7 +415,9 @@ async function uploadImageToS3(
       const formData = new FormData();
       formData.append('file', fs.createReadStream(imagePath));
 
-      const { data } = await axios.post<import('./types/api').ImageUploadResponse>(
+      const { data } = await axios.post<
+        import('./types/api').ImageUploadResponse
+      >(
         'https://7di6r3pc52.execute-api.us-east-1.amazonaws.com/uploads',
         formData,
         {
@@ -435,7 +427,9 @@ async function uploadImageToS3(
       );
 
       if (!isImageUploadResponse(data) || data.length === 0) {
-        throw new Error(`Unexpected API response shape: ${JSON.stringify(data)}`);
+        throw new Error(
+          `Unexpected API response shape: ${JSON.stringify(data)}`
+        );
       }
 
       const url = data[0].publicUrl;
@@ -448,16 +442,24 @@ async function uploadImageToS3(
       if (axios.isAxiosError(err)) {
         const status = err.response?.status;
         const code = err.code;
-        console.error(
-          `❌ Upload error (Attempt ${attempt}/${retries})`,
-          { status, code, message: err.message }
-        );
+        console.error(`❌ Upload error (Attempt ${attempt}/${retries})`, {
+          status,
+          code,
+          message: err.message,
+        });
 
         // Retry on 5xx/429 and network-ish errors; otherwise don't waste attempts
         if (status && !(status >= 500 || status === 429)) {
           shouldRetry = false;
         }
-        if (!status && !(code === 'ECONNABORTED' || code === 'ETIMEDOUT' || code === 'ENOTFOUND')) {
+        if (
+          !status &&
+          !(
+            code === 'ECONNABORTED' ||
+            code === 'ETIMEDOUT' ||
+            code === 'ENOTFOUND'
+          )
+        ) {
           // Unknown non-HTTP error with no status — still allow retry by default
         }
       } else {
@@ -479,8 +481,6 @@ async function uploadImageToS3(
   console.error(`🚨 Upload failed after ${retries} attempts: ${imagePath}`);
   return null;
 }
-
-
 
 /* Google Docs exports text formatting via CSS classes, not inline tags like <b>, <em>, etc.
 This function translates those classes into semantic HTML tags — which is better for email clients (like Mailchimp) and easier to style consistently.
@@ -524,53 +524,112 @@ function processFormatting(
       tagsApplied.push('underline');
     }
 
+    // Trim trailing spaces/NBSP from the current span's innerHTML
+    const rtrimmed = content.replace(/[ \u00A0]+$/u, '');
     let trailingSpace = '';
 
-    // ✅ Handle next text node
+    // Peek at the next sibling
     const nextNode = el.nextSibling;
-    if (
+
+    // Does the next sibling start with whitespace (text node)?
+    const nextIsTextWithWS =
       nextNode &&
       nextNode.type === 'text' &&
-      'data' in nextNode &&
-      typeof nextNode.data === 'string'
-    ) {
-      const match = nextNode.data.match(/^(\s+)/);
-      if (match) {
-        trailingSpace = match[1] === '\u00A0' ? '&nbsp;' : match[1];
-        console.log(
-          '→ Found trailing space in text node:',
-          JSON.stringify(trailingSpace)
-        );
-        nextNode.data = nextNode.data.slice(trailingSpace.length);
-      } else {
-        console.log(
-          '→ No leading space in next text node:',
-          JSON.stringify(nextNode.data)
-        );
+      typeof (nextNode as any).data === 'string' &&
+      /^[\s\u00A0]+/.test((nextNode as any).data);
+
+    // Or is the next sibling a <span> that is only whitespace / &nbsp; ?
+    const nextIsSpaceOnlySpan =
+      nextNode &&
+      nextNode.type === 'tag' &&
+      nextNode.name === 'span' &&
+      // strip any nested tags first (paranoia)
+      !/[^\s\u00A0]/.test(($(nextNode).html() || '').replace(/<[^>]+>/g, ''));
+
+    // Figure out the first printable character of what comes after this span,
+    // so we don't inject a space before punctuation.
+    const nextPrintable = (() => {
+      let n: any = nextNode;
+      // skip space-only spans
+      while (
+        n &&
+        n.type === 'tag' &&
+        n.name === 'span' &&
+        !/[^\s\u00A0]/.test($(n).text() || '')
+      ) {
+        n = n.nextSibling;
       }
+      if (!n) return '';
+      if (n.type === 'text') return (n.data || '').trim().charAt(0);
+      const t = $(n).text?.() || '';
+      return t.trim().charAt(0);
+    })();
+
+    const addSpace = !/[.,;:!?)]/.test(nextPrintable || '');
+
+    // Consume and normalize the neighbor’s leading whitespace
+    if (nextIsTextWithWS) {
+      (nextNode as any).data = (nextNode as any).data.replace(
+        /^[\s\u00A0]+/,
+        ''
+      );
+      trailingSpace = addSpace ? ' ' : '';
+    } else if (nextIsSpaceOnlySpan) {
+      $(nextNode).remove();
+      trailingSpace = addSpace ? ' ' : '';
     }
 
-    // ✅ Handle next <span> node that contains only a space or &nbsp;
-    else if (nextNode && nextNode.type === 'tag' && nextNode.name === 'span') {
-      const $next = $(nextNode);
-      const nextHtml = $next.html()?.trim();
-      if (nextHtml === '&nbsp;' || nextHtml === '\u00A0' || nextHtml === ' ') {
-        trailingSpace = '&nbsp;';
-        $next.remove();
-        console.log(
-          '→ Found trailing space in next <span> tag, removing sibling and keeping space.'
-        );
-      }
-    } else {
-      console.log('→ No valid next node for trailing space.');
-    }
-
-    const newHtml = content + trailingSpace;
-    console.log('→ Replacing span with:', JSON.stringify(newHtml));
-    console.log('→ Tags applied:', tagsApplied.join(', ') || 'none');
-    console.log('→ Original innerHTML:', JSON.stringify(originalText));
-
+    // Build the final HTML using the trimmed content
+    const newHtml = rtrimmed + trailingSpace;
     $el.replaceWith($.parseHTML(newHtml));
+
+    // let trailingSpace = '';
+
+    // // ✅ Handle next text node
+    // const nextNode = el.nextSibling;
+    // if (
+    //   nextNode &&
+    //   nextNode.type === 'text' &&
+    //   'data' in nextNode &&
+    //   typeof nextNode.data === 'string'
+    // ) {
+    //   const match = nextNode.data.match(/^(\s+)/);
+    //   if (match) {
+    //     trailingSpace = match[1] === '\u00A0' ? '&nbsp;' : match[1];
+    //     console.log(
+    //       '→ Found trailing space in text node:',
+    //       JSON.stringify(trailingSpace)
+    //     );
+    //     nextNode.data = nextNode.data.slice(trailingSpace.length);
+    //   } else {
+    //     console.log(
+    //       '→ No leading space in next text node:',
+    //       JSON.stringify(nextNode.data)
+    //     );
+    //   }
+    // }
+
+    // // ✅ Handle next <span> node that contains only a space or &nbsp;
+    // else if (nextNode && nextNode.type === 'tag' && nextNode.name === 'span') {
+    //   const $next = $(nextNode);
+    //   const nextHtml = $next.html()?.trim();
+    //   if (nextHtml === '&nbsp;' || nextHtml === '\u00A0' || nextHtml === ' ') {
+    //     trailingSpace = '&nbsp;';
+    //     $next.remove();
+    //     console.log(
+    //       '→ Found trailing space in next <span> tag, removing sibling and keeping space.'
+    //     );
+    //   }
+    // } else {
+    //   console.log('→ No valid next node for trailing space.');
+    // }
+
+    // const newHtml = content + trailingSpace;
+    // console.log('→ Replacing span with:', JSON.stringify(newHtml));
+    // console.log('→ Tags applied:', tagsApplied.join(', ') || 'none');
+    // console.log('→ Original innerHTML:', JSON.stringify(originalText));
+
+    // $el.replaceWith($.parseHTML(newHtml));
   });
 }
 
@@ -591,7 +650,7 @@ function updateImageStyles($: cheerio.CheerioAPI) {
     const $img = $(el);
     $img.removeAttr('title');
 
-    //Scrub title on links too 
+    //Scrub title on links too
     $('a[title]').removeAttr('title');
 
     // ✅ Remove the existing "style" attribute
@@ -625,8 +684,6 @@ function updateImageStyles($: cheerio.CheerioAPI) {
   console.log('✅ Image styles updated!');
 }
 
-
-
 function makeDividerP($: cheerio.CheerioAPI) {
   return $('<p>')
     .attr('data-h2-snippet', '1')
@@ -647,42 +704,6 @@ function makeDividerP($: cheerio.CheerioAPI) {
     .html('&nbsp;');
 }
 
-// Ensure exactly ONE divider immediately before every <h2>
-function ensureSingleDividerBeforeH2($: cheerio.CheerioAPI) {
-  $('h2').each((_, el) => {
-    const $h2 = $(el);
-
-    // Collapse stacked duplicates
-    let prev = $h2.prev();
-    while (
-      prev.is('p[data-h2-snippet], p[style*="border: 1px solid #efefef"]') &&
-      prev.prev().is('p[data-h2-snippet], p[style*="border: 1px solid #efefef"]')
-    ) {
-      prev.prev().remove(); // remove the farther one
-      prev = $h2.prev();    // re-check
-    }
-
-    // If the immediate previous is already a divider, do nothing
-    if (
-      $h2.prev().is('p[data-h2-snippet]') ||
-      $h2.prev().is('p[style*="border: 1px solid #efefef"]')
-    ) {
-      return;
-    }
-
-    // Otherwise insert your divider
-    $h2.before(
-      `<p data-h2-snippet="1" style="border: 1px solid #efefef;font-size: 0px;line-height: 0px;color: #202020;">&nbsp;</p>`
-    );
-  });
-}
-
-
-
-
-
-
-
 // ✅ Function to Modify HTML Using Cheerio
 async function modifyHtml(incomingHtmlContent: string) {
   const classMappings = extractClassMappings(incomingHtmlContent);
@@ -690,15 +711,15 @@ async function modifyHtml(incomingHtmlContent: string) {
 
   $('img[title]').removeAttr('title');
 
-  // Normalization function for text comparison of Hot Job 
+  // Normalization function for text comparison of Hot Job
   const norm = (s: string) =>
-    s.replace(/\s+/g, ' ')
+    s
+      .replace(/\s+/g, ' ')
       .trim()
       .toLowerCase()
       .replace(/[.:–—-]+$/g, '');
 
   $('head').remove(); // Remove <head> tag
-
 
   $('p').each((index, el) => {
     const $p = $(el);
@@ -802,254 +823,461 @@ async function modifyHtml(incomingHtmlContent: string) {
   $('*').removeAttr('id'); // Remove all IDs
   $('*').removeAttr('start'); // Remove start attributes
 
-  // 🧹 Remove empty/near-empty headings (h2–h6)
-(() => {
-  let removed = 0;
+  // --- Replace <hr> with our DVD divider and normalize any old divider Ps ---
+  const dvdHtml =
+    '<p class="dvd" style="border-bottom: 3px solid #cccccc;display:block">&nbsp;</p>';
 
-  $('h1,h2,h3,h4,h5,h6').each((_, el) => {
+  // Replace raw <hr> (and <p><hr></p>) with the new <p class="dvd">…
+  $('hr').each((_, hr) => {
+    const $hr = $(hr);
+    const $parentP = $hr.parent().is('p') ? $hr.parent() : null;
+    if ($parentP) $parentP.replaceWith(dvdHtml);
+    else $hr.replaceWith(dvdHtml);
+  });
+
+  // Also normalize any previous divider Ps we may have inserted earlier
+  $('p[data-h2-snippet], p[style*="border: 1px solid #efefef"]').each(
+    (_, p) => {
+      $(p).replaceWith(dvdHtml);
+    }
+  );
+
+  // De-dupe back-to-back dividers
+  $('.dvd').each((_, el) => {
+    const $el = $(el);
+    if ($el.prev().hasClass('dvd')) $el.remove();
+  });
+
+  // 🧹 Remove empty/near-empty headings (h2–h6)
+  (() => {
+    let removed = 0;
+
+    $('h1,h2,h3,h4,h5,h6').each((_, el) => {
+      const $el = $(el);
+
+      // Text, normalized (treat &nbsp; as space)
+      const text = $el
+        .text()
+        .replace(/\u00A0/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      // Raw inner HTML to detect "only breaks/&nbsp;"
+      const html = ($el.html() || '').trim();
+
+      const onlyBreaks = html === '' || /^(\s|&nbsp;|<br\s*\/?>)*$/i.test(html);
+
+      // Treat lone punctuation/markers as “empty” too (e.g. a stray pipe or dash)
+      const onlyPunct =
+        text.length > 0 && /^[\|•·\-\u2013\u2014_.,:;]+$/u.test(text);
+
+      if (text === '' || onlyBreaks || onlyPunct) {
+        $el.remove();
+        removed++;
+      }
+    });
+
+    if (removed) {
+      console.log(`🧹 Removed ${removed} empty headings (h1–h6).`);
+    }
+  })();
+
+  // $('img').removeAttr('style'); Remove inline styles from images
+
+  // Add class to images
+  $('img').addClass('edit-img');
+
+  // Add headline style to h1
+  $('h1').each((index, el) => {
     const $el = $(el);
 
-    // Text, normalized (treat &nbsp; as space)
-    const text = $el
-      .text()
-      .replace(/\u00A0/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    // keep your Santa Cruz Local H1 styles
+    $el.attr(
+      'style',
+      "color: #1d242d; font-size: 26px; font-family: 'Merriweather', Georgia,'Times New Roman', serif; font-weight: 400; line-height: 150%;"
+    );
+    $el.attr('mc:edit', `mainheader${index + 1}`);
 
-    // Raw inner HTML to detect "only breaks/&nbsp;"
-    const html = ($el.html() || '').trim();
+    // If H1 is composed only of <b>/<strong> and text (no links/images/etc.),
+    // merge into a single <b>…</b> with normalized spacing.
+    const onlyBStrongAndText = $el
+      .contents()
+      .toArray()
+      .every(
+        (n: any) =>
+          n.type === 'text' ||
+          (n.type === 'tag' && /^(b|strong)$/i.test(n.name))
+      );
 
-    const onlyBreaks = html === '' || /^(\s|&nbsp;|<br\s*\/?>)*$/i.test(html);
+    if (onlyBStrongAndText) {
+      // Combine visible text, normalize spaces, preserve colon, add trailing space if needed
+      const text = $el
+        .text()
+        .replace(/\u00A0/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 
-    // Treat lone punctuation/markers as “empty” too (e.g. a stray pipe or dash)
-    const onlyPunct = text.length > 0 && /^[\|•·\-\u2013\u2014_.,:;]+$/u.test(text);
+      const finalText = /:$/.test(text) ? `${text} ` : text; // add one space if ends with ':'
+      $el.html(`<b>${finalText}</b>`);
 
-    if (text === '' || onlyBreaks || onlyPunct) {
-      $el.remove();
-      removed++;
+      console.log('🧹 H1 consolidated into single <b>:', finalText);
+      return;
+    }
+
+    // wrap inner HTML in <b> unless it's already a top-level <b>/<strong>
+    // Fallback: if it doesn't already start with a bold container, wrap once
+    const inner = ($el.html() || '').trim();
+    if (inner && !/^\s*<(b|strong)\b/i.test(inner)) {
+      $el.html(`<b>${inner}</b>`);
     }
   });
 
-  if (removed) {
-    console.log(`🧹 Removed ${removed} empty headings (h1–h6).`);
-  }
-})();
+  // Before H2 styles insert tipline (signup prompt)
+  const signupPromptHtml = latestSignupPromptHtml || DEFAULT_SIGNUP_PROMPT_HTML;
 
+  // Add markers around the tipline for easy identification later if needed
+  const TIPLINE_START = '<!--TIPLINE_START-->';
+  const TIPLINE_END = '<!--TIPLINE_END-->';
+  const wrappedTipline = `${TIPLINE_START}${signupPromptHtml}${TIPLINE_END}`;
 
+  // Insert the signup prompt right above the H2 that reads "Hot jobs"
+  const $hotJobsH2 = $('h2')
+    .filter((_, el) => norm($(el).text()) === 'hot jobs')
+    .first();
 
-// $('img').removeAttr('style'); Remove inline styles from images
-
-
-
-// Add class to images
-$('img').addClass('edit-img');
-
-
-// Add headline style to h1  
-  $('h1').each((index, el) => {
-    const $el = $(el);
-    $el.attr(
-      'style',
-      `margin-bottom: 0px;padding: 10px 15px 5px 10px;text-align: center;font-family: 'Raleway',Helvetica,Arial,Lucida,sans-serif;font-size: 32px;line-height: 125%;color: #202020;font-weight: bold;display: block;margin: 0;`
-    );
-    $el.attr('mc:edit', `mainheader${index + 1}`);
-  });
-
-// Before H2 styles insert tipline (signup prompt)
-const signupPromptHtml = latestSignupPromptHtml || DEFAULT_SIGNUP_PROMPT_HTML;
-
-// Add markers around the tipline for easy identification later if needed
-const TIPLINE_START = '<!--TIPLINE_START-->';
-const TIPLINE_END   = '<!--TIPLINE_END-->';
-const wrappedTipline = `${TIPLINE_START}${signupPromptHtml}${TIPLINE_END}`;
-
-// Insert the signup prompt right above the H2 that reads "Hot jobs"
-const $hotJobsH2 = $('h2')
-  .filter((_, el) => norm($(el).text()) === 'hot jobs')
-  .first();
-
-if ($hotJobsH2.length) {
-  $hotJobsH2.before(wrappedTipline);
-} else {
-  const $h2s = $('h2');
-
-  if ($h2s.length >= 2) {
-    // before the second <h2>
-    $h2s.eq(1).before(wrappedTipline);
-  } else if ($h2s.length === 1) {
-    // fallback: after the only <h2> (effectively “between” h2 and the rest)
-    $h2s.eq(0).after(wrappedTipline);
+  if ($hotJobsH2.length) {
+    $hotJobsH2.before(wrappedTipline);
   } else {
-    // no <h2> at all → fallback to before first <h3> or top of body
-    const $firstH3 = $('h3').first();
-    if ($firstH3.length) $firstH3.before(signupPromptHtml);
-    else $('body').prepend(signupPromptHtml);
+    const $h2s = $('h2');
+
+    if ($h2s.length >= 2) {
+      // before the second <h2>
+      $h2s.eq(1).before(wrappedTipline);
+    } else if ($h2s.length === 1) {
+      // fallback: after the only <h2> (effectively “between” h2 and the rest)
+      $h2s.eq(0).after(wrappedTipline);
+    } else {
+      // no <h2> at all → fallback to before first <h3> or top of body
+      const $firstH3 = $('h3').first();
+      if ($firstH3.length) $firstH3.before(signupPromptHtml);
+      else $('body').prepend(signupPromptHtml);
+    }
   }
-}
 
+  // Add button style to h2
+  // Convert any linked <h2> into a centered CTA button
+  $('h2').each((i, el) => {
+    const $h2 = $(el);
+    const $a0 = $h2.find('a[href]').first();
+    if (!$a0.length) return;
 
-// Add section style to h2  
-  $('h2').each((index, el) => {
-    const $el = $(el);
+    const href = $a0.attr('href')!;
+    const text = (
+      $a0.text().trim() ||
+      $h2.text().trim() ||
+      'Read more'
+    ).replace(/\s+/g, ' ');
 
-    // Set h2 inline styles
-    $el.attr(
-      'style',
-      `display: block;padding: 25px 0px 15px 0px;font-size: 36px;line-height: 125%;color: #0093ac;font-weight: normal;font-family: 'Raleway',Helvetica,Arial,Lucida,sans-serif;margin: 0;`
-    );
+    // Replace contents with a single styled <a>, mark so other H2 logic skips it
+    $h2
+      .empty()
+      .attr(
+        'style',
+        'display: block; text-align:center; padding-top: 8px !important; padding-bottom: 4px !important;'
+      )
+      .attr('data-h2-button', '1') // marker to skip later H2 styling
+      .attr('mc:edit', `h2cta${i + 1}`);
 
-    $el.attr('mc:edit', `secth2${index + 1}`);
+    const $btn = $('<a/>')
+      .attr('href', href)
+      .attr('target', $a0.attr('target') || '_blank')
+      .attr(
+        'style',
+        [
+          'min-width: 30px',
+          'font-size: 16px',
+          'border-radius: 8px',
+          'text-align: center',
+          'text-decoration: none',
+          'padding: 16px 28px',
+          'border: 2px solid #f47421',
+          'color: #4d4d4d',
+          "font-family: 'Work Sans', Arial, sans-serif",
+          'font-weight: 400',
+          'line-height: 135%',
+          'border-bottom: 2px solid #f47421 !important',
+        ].join('; ')
+      )
+      .text(text);
+
+    if ($a0.attr('rel')) $btn.attr('rel', $a0.attr('rel')!);
+
+    $h2.append($btn);
   });
 
-// Last h2 is orange
-const finalH2Style =
-  "padding: 25px 0px 15px 0px;display: block;text-align: left;text-transform: uppercase;text-decoration: none;font-weight: bold;font-size: 26px;color: #dd623c;font-family: 'Raleway',Helvetica,Arial,Lucida,sans-serif;margin: 0;padding-top: 25px;";
-
-const $lastH2 = $('h2').last();
-$lastH2
-  .addClass('final')             
-  .attr('style', finalH2Style);
-
-// insert line above every h2
-// make sure it is below styling paragraphs
-ensureSingleDividerBeforeH2($);
-
-
-
-// Add subhead style to h3
+  // Add subhead style to h3
   $('h3').each((index, el) => {
     const $el = $(el);
     $el.attr(
       'style',
-      `margin-top: 2px;display: block;text-align: center;font-family: 'Open Sans',Helvetica,Arial,Lucida,sans-serif;font-size: 22px;line-height: 125%;padding: 2px 15px 10px 15px;margin-bottom: 7px;color: #202020;font-weight: normal;margin: 0;`
+      `font-size: 36px; line-height: 125%; color: #000000; font-family: Merriweather, Georgia, 'Times New Roman', serif; padding-top: 0px; margin-top: 0px; padding-bottom: 5px; margin-bottom: 5px; font-weight:normal;`
     );
     $el.attr('mc:edit', `sub${index + 1}`);
   });
 
-  // Add caption style to h4
-  $('h4').each((index, el) => {
-    const $el = $(el);
-    $el.attr(
-      'style',
-      `font-weight: 400;color: #7E8498;font-family: 'Raleway',Helvetica,Arial,Lucida,sans-serif;font-size: 14px;line-height: 17px;display: block;padding-top: 3px;margin-top: 3px;text-align: right;padding-bottom: 10px;margin-bottom: 0px;`
-    );
-    $el.attr('mc:edit', `cap${index + 1}`);
-  });
+  // Add section heading style to h4
+  // $('h4').each((index, el) => {
+  //   const $el = $(el);
+  //   $el.attr(
+  //     'style',
+  //     `display: block;  background-color: #FEE213;  padding: 10px 10px;  font-size: 15px;  text-align: left;  color: #000000;  font-family: 'Merriweather', Georgia,'Times New Roman', serif;  font-weight: bold; line-height: 120%;`
+  //   );
+  //   $el.attr('mc:edit', `cap${index + 1}`);
+  // });
 
-  // stat of the month blue box inside h5
+  // style h5 as caption — italics via <em>, no class, no font-style in inline CSS
   $('h5').each((index, el) => {
     const $h5 = $(el);
-    $h5
-      .addClass('cme')
-      .attr(
-        'style',
-        'color: #ffffff;background-color: #0093ac;display: inline-block;padding: 20px 20px;font-size: 36px;line-height: 100%;margin-top: 10px;margin-bottom: 10px;margin: 0;'
-      )
-      .attr('mc:edit', `h5cme${index + 1}`);
 
-    // Wrap in <center> (avoid double-wrapping)
-    if (($h5.parent()[0]?.tagName || '').toLowerCase() !== 'center') {
-      $h5.wrap('<center></center>');
+    // Inline caption style (no font-style here)
+    $h5.attr(
+      'style',
+      [
+        'display: block',
+        'font-size: 16px',
+        'text-align: left',
+        'color: #4d4d4d',
+        "font-family: 'Work Sans', Arial, sans-serif",
+        'font-weight: 400',
+        'line-height: 135%',
+      ].join('; ')
+    );
+
+    // (Optional) keep mc:edit if you use it in Mailchimp
+    $h5.attr('mc:edit', `h5cme${index + 1}`);
+
+    // remove any class
+    $h5.removeAttr('class');
+
+    // strip nested bold so caption isn’t bold
+    $h5.find('b, strong').each((_, n) => {
+      const $n = $(n);
+      $n.replaceWith($n.html() || $n.text() || '');
+    });
+
+    // wrap entire caption in <em> unless already top-level <em>/<i>
+    const inner = ($h5.html() || '').trim();
+    if (!/^<(em|i)\b/i.test(inner)) {
+      $h5.html(`<em>${inner}</em>`);
     }
   });
 
-// Paragraph text style
-$('p')
-  .not('[data-h2-snippet]')
-  .each((index, el) => {
+  // Paragraph text style
+  $('p')
+    .not('[data-h2-snippet]')
+    .each((index, el) => {
+      const $el = $(el);
+      $el.attr('style', `font-size: 18px;line-height: 150%;color: #202020;`);
+      $el.attr('mc:edit', `paragr${index + 1}`);
+    });
+
+  // $('li').each((index, el) => {
+  //   const $el = $(el);
+  //   $el.attr(
+  //     'style',
+  //     `line-height: 150%; font-size: 18px; font-family: 'Open Sans',Helvetica,Arial,Lucida,sans-serif;`
+  //   );
+  //   $el.attr('mc:edit', `listel${index + 1}`);
+  // });
+
+  // // List link style
+  // $('li a').each((_, el) => {
+  //   const $el = $(el);
+  //   $el.attr(
+  //     'style',
+  //     'text-decoration: underline;color: #dd623c;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;'
+  //   );
+  // });
+
+  // style first ordered list only like this
+  // Style the first ordered list (prefer top-level <ol>) + mc:edit
+  const olStyle = [
+    "font-family: 'Work Sans', Arial, sans-serif",
+    'line-height: 160% !important',
+    'font-size: 16px !important',
+    'font-weight: 400',
+    'padding-top: 0px',
+    'color: #4d4d4d',
+    'mso-line-height-rule: exactly',
+  ].join('; ');
+
+  let $firstOL = $('body > ol').first(); // top-level only
+  if (!$firstOL.length) $firstOL = $('ol').first(); // fallback
+
+  if ($firstOL.length) {
+    // Style + make the OL itself editable (optional but handy)
+    $firstOL.attr('style', olStyle);
+    $firstOL.attr('mc:edit', 'olFirst');
+
+    // Override LI styles + give each a unique mc:edit name
+    $firstOL.find('li').each((i, li) => {
+      const $li = $(li);
+      $li.attr(
+        'style',
+        [
+          "font-family: Merriweather, Georgia, 'Times New Roman', serif",
+          'line-height: 150% !important',
+          'font-size: 15px !important',
+          'font-weight: 400',
+          'color: #000000',
+          'mso-line-height-rule: exactly',
+        ].join('; ')
+      );
+
+      // Use a distinct namespace so these don't collide with your global `listel${index+1}`
+      $li.attr('mc:edit', `listel_ol1_${i + 1}`);
+    });
+  }
+
+  // Add section heading style h4 + leading "N /" → "N <span...>/</span>&nbsp;"
+  // Add section heading style h4 + leading "N /" → "N <span...>/</span>&nbsp;"
+  $('h4').each((index, el) => {
     const $el = $(el);
-    $el.attr('style', `font-size: 18px;line-height: 150%;color: #202020;`);
-    $el.attr('mc:edit', `paragr${index + 1}`);
+
+    // keep styles
+    $el.attr(
+      'style',
+      [
+        'display: block',
+        'background-color: #FEE213',
+        'padding: 10px 10px',
+        'font-size: 15px',
+        'text-align: left',
+        'color: #000000',
+        "font-family: 'Merriweather', Georgia,'Times New Roman', serif",
+        'font-weight: bold',
+        'line-height: 120%',
+      ].join('; ')
+    );
+    $el.attr('mc:edit', `cap${index + 1}`);
+
+    // Ensure a single bold wrapper
+    const inner = ($el.html() || '').trim();
+    if (!/^<(b|strong)\b/i.test(inner)) {
+      $el.html(`<b>${inner}</b>`);
+    }
+
+    const $bold = $el.children('b, strong').first();
+    if (!$bold.length) return;
+
+    // --- NEW: flatten nested <b>/<strong> so regex can see "5 /" ---
+    $bold.find('b, strong').each((_, n) => {
+      const $n = $(n);
+      $n.replaceWith($n.html() || '');
+    });
+    // ---------------------------------------------------------------
+
+    let html = $bold.html() || '';
+
+    // Skip if already converted
+    if (html.includes('<span style="color:#f47421">/</span>')) return;
+
+    // Normalize NBSP → char, apply replacement at start, restore &nbsp;
+    html = html
+      .replace(/&nbsp;/gi, '\u00A0')
+      // start → digits → spaces/NBSP → slash → optional spaces/NBSP
+      .replace(
+        /^\s*(\d+)[\s\u00A0]*\/[\s\u00A0]*/u,
+        (_m, num) => `${num} <span style="color:#f47421">/</span>&nbsp; `
+      )
+      .replace(/\u00A0/g, '&nbsp;');
+
+    $bold.html(html);
   });
 
+  // Convert <h6>...[<a href="...">Text</a>]...</h6> into styled CTA using that href
+  $('h6').each((_, el) => {
+    const $old = $(el);
 
-$('li').each((index, el) => {
-  const $el = $(el);
-  $el.attr(
-    'style',
-    `line-height: 150%; font-size: 18px; font-family: 'Open Sans',Helvetica,Arial,Lucida,sans-serif;`
-  );
-  $el.attr('mc:edit', `listel${index + 1}`);
-});
+    // Use the first anchor inside the h6; if none, do nothing
+    const $origA = $old.find('a[href]').first();
+    if (!$origA.length) return;
 
-// List link style
-  $('li a').each((_, el) => {
-    const $el = $(el);
-    $el.attr('style', 'text-decoration: underline;color: #dd623c;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;');
+    const href = $origA.attr('href')!;
+    const text = $origA.text().trim() || $old.text().trim();
+
+    // Build new <h6>
+    const $newH6 = $('<h6></h6>');
+    $newH6.attr(
+      'style',
+      'display: block;text-align: center;padding-top: 8px;margin-top: 8px;margin: 0;padding: 0;'
+    );
+
+    // Build new <a>
+    const $newA = $('<a></a>');
+    $newA.attr('href', href);
+    $newA.attr(
+      'style',
+      'background-color: #dd623c;border-radius: 2px;color: #ffffff;text-decoration: none;padding: 10px;font-size: 18px;background: #dd623c;border: 5px solid  #dd623c;border-color: #dd623c;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;'
+    );
+    $newA.attr('target', $origA.attr('target') || '_blank');
+    if ($origA.attr('rel')) $newA.attr('rel', $origA.attr('rel')!);
+
+    // Underlined text (avoid innerHTML; keep it safe)
+    const $u = $('<u></u>').text(text);
+    $newA.append($u);
+
+    $newH6.append($newA);
+    $old.replaceWith($newH6);
   });
-
-  // Caption link style
-  $('h4 a').each((_, el) => {
-    const $el = $(el);
-    $el.attr('style', 'text-decoration: underline;color: #dd623c;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;');
-  });
-
-
-
-// Convert <h6>...[<a href="...">Text</a>]...</h6> into styled CTA using that href
-$('h6').each((_, el) => {
-  const $old = $(el);
-
-  // Use the first anchor inside the h6; if none, do nothing
-  const $origA = $old.find('a[href]').first();
-  if (!$origA.length) return;
-
-  const href = $origA.attr('href')!;
-  const text = $origA.text().trim() || $old.text().trim();
-
-  // Build new <h6>
-  const $newH6 = $('<h6></h6>');
-  $newH6.attr(
-    'style',
-    'display: block;text-align: center;padding-top: 8px;margin-top: 8px;margin: 0;padding: 0;'
-  );
-
-  // Build new <a>
-  const $newA = $('<a></a>');
-  $newA.attr('href', href);
-  $newA.attr(
-    'style',
-    'background-color: #dd623c;border-radius: 2px;color: #ffffff;text-decoration: none;padding: 10px;font-size: 18px;background: #dd623c;border: 5px solid  #dd623c;border-color: #dd623c;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;'
-  );
-  $newA.attr('target', $origA.attr('target') || '_blank');
-  if ($origA.attr('rel')) $newA.attr('rel', $origA.attr('rel')!);
-
-  // Underlined text (avoid innerHTML; keep it safe)
-  const $u = $('<u></u>').text(text);
-  $newA.append($u);
-
-  $newH6.append($newA);
-  $old.replaceWith($newH6);
-});
-
-
-
-
-
 
   let previewText = $('p').first().text().trim();
   let subjectFromH1: string =
-  $('h1')
-    .first()
-    .text()
-    .replace(/\u00A0/g, ' ')   // turn NBSP into space
-    .replace(/\s+/g, ' ')      // collapse whitespace
-    .trim() || '';             // fallback to empty string
+    $('h1')
+      .first()
+      .text()
+      .replace(/\u00A0/g, ' ') // turn NBSP into space
+      .replace(/\s+/g, ' ') // collapse whitespace
+      .trim() || ''; // fallback to empty string
   const words = previewText.split(/\s+/).slice(0, 15);
   previewText = words.join(' ') + (words.length >= 15 ? '...' : '');
 
-  // process links inside paragraphs
-  $('p a').each(function (this: any) {
-    const $this = $(this);
-    $this.attr(
+  // Unwrap <u> that wraps links inside paragraphs (keeps inner HTML/spacing)
+  $('p u:has(a)').each((_, u) => {
+    const $u = $(u);
+    $u.replaceWith($u.html() || $u.text() || '');
+  });
+
+  // (Optional hardening) If Google Docs nested extra tags, unwrap any <u> ancestors of links in <p>
+  $('p a').each((_, a) => {
+    $(a)
+      .parents('u')
+      .each((__, u) => {
+        const $u = $(u);
+        $u.replaceWith($u.html() || $u.text() || '');
+      });
+  });
+
+  // Paragraph link style: grey text, 1px orange bottom border, no underline
+  $('p a:not(:has(img))').each((_, el) => {
+    const $a = $(el);
+
+    // Overwrite inline style to enforce consistency
+    $a.attr(
       'style',
-      `color:#dd623c;
-      text-decoration: underline;
-      -webkit-text-size-adjust:100%
-			-ms-text-size-adjust:100%;
-     `
+      [
+        'color: #4d4d4d',
+        'border-bottom: solid 1px #f4741c',
+        'text-decoration: none',
+        '-webkit-text-size-adjust:100%',
+        '-ms-text-size-adjust:100%',
+      ].join('; ')
     );
-    $this.attr('target', '_blank');
+
+    // Open in new tab unless already set
+    if ($a.attr('target') !== '_blank') {
+      $a.attr('target', '_blank');
+    }
   });
 
   // ✅ Ensure links wrapping images have no styling
@@ -1081,7 +1309,6 @@ $('h6').each((_, el) => {
     }
   });
 
- 
   // Final steps
   const FinalHtmlContent = $('html').contents();
   $.root().empty().append(FinalHtmlContent);
@@ -1184,7 +1411,11 @@ async function validateLinks(htmlContent: string) {
 
 // REPLACE your current processAndValidateHtml with this
 async function processAndValidateHtml(htmlContent: string) {
-  const { html: processedHTML, previewText, subjectFromH1 } = await modifyHtml(htmlContent);
+  const {
+    html: processedHTML,
+    previewText,
+    subjectFromH1,
+  } = await modifyHtml(htmlContent);
 
   // ✅ Respect the user toggle to turn link checking on or off
   const enabled = settingsCache.linkCheckerEnabled ?? true;
@@ -1195,7 +1426,6 @@ async function processAndValidateHtml(htmlContent: string) {
   // ✅ Just return (don't send here)
   return { processedHTML, previewText, subjectFromH1, linkResults };
 }
-
 
 // ipcMain.handle('create-campaign', async (_evt, payload: CreateCampaignPayload): Promise<CreateCampaignResult> => {
 //   // basic validation (keeps renderer UI honest)
@@ -1228,7 +1458,6 @@ async function processAndValidateHtml(htmlContent: string) {
 //   };
 // });
 
-
 ipcMain.handle('sendTestEmail', async (_event, payload) => {
   const { html, ...rest } = payload;
   console.log('📤 [Logging only] Would send test email with payload:', rest);
@@ -1245,7 +1474,7 @@ ipcMain.handle('sendTestEmail', async (_event, payload) => {
       {
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': 'grace-sending-from-her-computer-12345'
+          'x-api-key': 'santa-cruz-local-from-computer-12345',
         },
       }
     );
@@ -1294,7 +1523,7 @@ ipcMain.handle('send-now-email', async (_event, payload) => {
       {
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': 'grace-sending-from-her-computer-12345'
+          'x-api-key': 'grace-sending-from-her-computer-12345',
         },
       }
     );
@@ -1327,101 +1556,101 @@ ipcMain.handle('send-now-email', async (_event, payload) => {
   }
 });
 
-// TODO: Bring this back to send now button 
+// TODO: Bring this back to send now button
 // ipcMain.handle('send-now-email', async (event, payload) => {
 //   const { html, ...rest } = payload;
 //   console.log('📤 [Logging only] Would send email with payload:', rest);
 
-  // console.log('📤 Sending Now email request received:', payload);
+// console.log('📤 Sending Now email request received:', payload);
 
-  // try {
-  //   const response = await axios.post(
-  //     'YOUR_GATE_WAY', // ✅ Replace with your actual API Gateway/Lambda endpoint
-  //     payload,
-  //     {
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //         'x-api-key': 'YOUR_SHARED_SECRET'
-  //       },
-  //     }
-  //   );
+// try {
+//   const response = await axios.post(
+//     'YOUR_GATE_WAY', // ✅ Replace with your actual API Gateway/Lambda endpoint
+//     payload,
+//     {
+//       headers: {
+//         'Content-Type': 'application/json',
+//         'x-api-key': 'YOUR_SHARED_SECRET'
+//       },
+//     }
+//   );
 
-  //   console.log('✅ Email sent immediately:', response.data);
-  //   return {
-  //     success: true,
-  //     message: 'Production email sent!',
-  //     data: response.data,
-  //   };
-  //   // event.reply('send-now-email-success', response.data);
-  // } catch (error) {
-  //   console.error('❌ Error sending test email:', error);
+//   console.log('✅ Email sent immediately:', response.data);
+//   return {
+//     success: true,
+//     message: 'Production email sent!',
+//     data: response.data,
+//   };
+//   // event.reply('send-now-email-success', response.data);
+// } catch (error) {
+//   console.error('❌ Error sending test email:', error);
 
-  //   if (axios.isAxiosError(error)) {
-  //     const detail = error.response?.data?.detail;
-  //     const fallback = error.message || 'Request failed';
+//   if (axios.isAxiosError(error)) {
+//     const detail = error.response?.data?.detail;
+//     const fallback = error.message || 'Request failed';
 
-  //     return {
-  //       success: false,
-  //       message: detail || fallback,
-  //       data: error.response?.data || null,
-  //     };
-  //   }
+//     return {
+//       success: false,
+//       message: detail || fallback,
+//       data: error.response?.data || null,
+//     };
+//   }
 
-  //   return {
-  //     success: false,
-  //     message: 'Unknown error occurred',
-  //     data: null,
-  //   };
-  // }
+//   return {
+//     success: false,
+//     message: 'Unknown error occurred',
+//     data: null,
+//   };
+// }
 // });
 
 // ipcMain.handle('send-scheduled-email', async (event, payload) => {
 //   const { html, ...rest } = payload;
 //   console.log('📤 [Logging only] Would schedule email with payload:', rest);
 
-  // console.log('📅 Scheduling email:', payload);
+// console.log('📅 Scheduling email:', payload);
 
-  // try {
-  //   const response = await axios.post(
-  //     'URL_HERE',
-  //     {
-  //       ...payload,
-  //       isTest: false,
-  //     },
-  //     {
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //         'x-api-key': 'YOUR_SHARED_SECRET'
-  //       },
-  //     }
-  //   );
+// try {
+//   const response = await axios.post(
+//     'URL_HERE',
+//     {
+//       ...payload,
+//       isTest: false,
+//     },
+//     {
+//       headers: {
+//         'Content-Type': 'application/json',
+//         'x-api-key': 'YOUR_SHARED_SECRET'
+//       },
+//     }
+//   );
 
-  //   console.log('✅ Email scheduled successfully:', response.data);
-  //   return {
-  //     success: true,
-  //     message: 'Email Scheduled!',
-  //     data: response.data,
-  //   };
-  // } catch (error) {
-  //   console.error('❌ Error scheduling email:', error);
+//   console.log('✅ Email scheduled successfully:', response.data);
+//   return {
+//     success: true,
+//     message: 'Email Scheduled!',
+//     data: response.data,
+//   };
+// } catch (error) {
+//   console.error('❌ Error scheduling email:', error);
 
-  //   if (axios.isAxiosError(error)) {
-  //     const detail = error.response?.data?.detail;
-  //     const fallback = error.message || 'Request failed';
+//   if (axios.isAxiosError(error)) {
+//     const detail = error.response?.data?.detail;
+//     const fallback = error.message || 'Request failed';
 
-  //     return {
-  //       success: false,
-  //       message: detail || fallback,
-  //       data: error.response?.data || null,
-  //     };
-  //   }
+//     return {
+//       success: false,
+//       message: detail || fallback,
+//       data: error.response?.data || null,
+//     };
+//   }
 
-  //   return {
-  //     success: false,
-  //     message: 'Unknown error occurred',
-  //     data: null,
-  //   };
-  // }
+//   return {
+//     success: false,
+//     message: 'Unknown error occurred',
+//     data: null,
+//   };
+// }
 // });
 
 // ipcMain.on('update-signup-prompt', async (_event, contentToSend: string) => {
@@ -1432,7 +1661,6 @@ ipcMain.handle('send-now-email', async (_event, payload) => {
 
 //   console.log(`Signup prompt saved to memory contentToSend:`, contentToSend);
 // });
-
 
 app.on('activate', () => {
   // On OS X it's common to re-create a window in the app when the
