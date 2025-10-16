@@ -496,6 +496,21 @@ function cleanGoogleRedirect(href: string): string {
   }
 }
 
+// --- helpers: detect "Month 12, 2024" or "Dec. 12, 2024" (case-insensitive) ---
+function isDateLine(s: string): boolean {
+  const text = s
+    .replace(/\u00A0/g, ' ') // NBSP -> space
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const month =
+    '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+  const monthWithDot = `(?:${month})\\.?`;
+  const re = new RegExp(`^${monthWithDot}\\s+\\d{1,2},\\s+\\d{4}$`, 'i');
+
+  return re.test(text);
+}
+
 function processFormatting(
   $: cheerio.CheerioAPI,
   classMappings: Record<string, string[]>
@@ -708,6 +723,19 @@ function makeDividerP($: cheerio.CheerioAPI) {
 async function modifyHtml(incomingHtmlContent: string) {
   const classMappings = extractClassMappings(incomingHtmlContent);
   const $ = cheerio.load(incomingHtmlContent);
+
+  $('head').remove(); // remove date of newsletter which should appear in the Google Doc only
+
+  // 🗓️ Remove a date-only first paragraph (e.g., "Dec. 15, 2024")
+  (() => {
+    const $candidate = $('p')
+      .filter((_, p) => isDateLine($(p).text()))
+      .first();
+    if ($candidate.length) {
+      console.log('🗓️ Removing date-only paragraph:', $candidate.text().trim());
+      $candidate.remove();
+    }
+  })();
 
   $('img[title]').removeAttr('title');
 
