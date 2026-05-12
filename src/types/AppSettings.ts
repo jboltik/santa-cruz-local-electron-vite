@@ -4,5 +4,8 @@ export type AppSettings = {
   autoCampaignPattern?: string;
   brand?: string;
   signupPromptHtml?: string;
+  memberMessageHtml?: string;
+  nonmemberMessageHtml?: string;
+  selectedMessageVariant?: 'member' | 'nonmember';
   linkCheckerEnabled?: boolean;
 };

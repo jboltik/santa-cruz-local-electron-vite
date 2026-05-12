@@ -46,34 +46,156 @@ let settingsCache: AppSettings = loadSettings();
 
 const DEFAULT_SIGNUP_PROMPT_HTML = `<p style="font-size: 8px;line-height: 150%;color: #202020;">&nbsp;</p><table role="presentation" style="width: 100%;max-width: 620px;margin: 0 auto;border-radius: 5px;background-color: #FDf9ED;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" cellspacing="0" cellpadding="10" align="center" width="100%" class="mobile-table" bgcolor="#FDf9ED"><tbody><tr><td align="center" valign="top" style="padding: 25px 20px 10px 20px;font-size: 36px;line-height: 125%;color: #0093ac;font-weight: normal;font-family: 'Raleway',Helvetica,Arial,Lucida,sans-serif;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;"><center>Tipline</center></td></tr><tr><td align="center" valign="top" style="padding: 0px 15px 25px 15px;color: #202020;font-weight: normal;line-height: 150%;font-size: 18px;font-family: 'Open Sans',Helvetica,Arial,Lucida,sans-serif;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;"><center>Got a confidential news tip? Drop us a line <a href="https://forms.gle/5eDFy7kJwa62H9KMA" target="_blank" style="color: #dd623c;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;text-decoration: underline;">here</a>.</center></td></tr></tbody></table><p style="font-size: 4px;line-height: 150%;">&nbsp;</p>`;
 
+
+type MessageVariant = 'member' | 'nonmember';
+
+const DEFAULT_MEMBER_MESSAGE_HTML = DEFAULT_SIGNUP_PROMPT_HTML;
+const DEFAULT_NONMEMBER_MESSAGE_HTML = DEFAULT_SIGNUP_PROMPT_HTML;
+
+let latestMemberMessageHtml: string =
+  settingsCache.memberMessageHtml ?? DEFAULT_MEMBER_MESSAGE_HTML;
+
+let latestNonmemberMessageHtml: string =
+  settingsCache.nonmemberMessageHtml ?? DEFAULT_NONMEMBER_MESSAGE_HTML;
+
+function getSelectedMessageVariant(): MessageVariant {
+  return settingsCache.selectedMessageVariant ?? 'member';
+}
+
+function getCurrentMessageHtml(): string {
+  const selectedVariant = getSelectedMessageVariant();
+
+  if (selectedVariant === 'nonmember') {
+    return (
+      settingsCache.nonmemberMessageHtml ??
+      latestNonmemberMessageHtml ??
+      DEFAULT_NONMEMBER_MESSAGE_HTML
+    );
+  }
+
+  return (
+    settingsCache.memberMessageHtml ??
+    latestMemberMessageHtml ??
+    DEFAULT_MEMBER_MESSAGE_HTML
+  );
+}
+
+function saveMessageHtmlForVariant(variant: MessageVariant, html: string) {
+  if (variant === 'nonmember') {
+    latestNonmemberMessageHtml = html;
+    settingsCache = {
+      ...settingsCache,
+      selectedMessageVariant: variant,
+      nonmemberMessageHtml: html,
+    };
+  } else {
+    latestMemberMessageHtml = html;
+    settingsCache = {
+      ...settingsCache,
+      selectedMessageVariant: variant,
+      memberMessageHtml: html,
+    };
+  }
+
+  // Keep old field populated for backwards compatibility with existing UI code
+  settingsCache.signupPromptHtml = html;
+
+  saveSettings(settingsCache);
+}
+
+
 let latestSignupPromptHtml: string | null =
   settingsCache.signupPromptHtml ?? DEFAULT_SIGNUP_PROMPT_HTML;
 
-ipcMain.handle('signup-prompt:get', async () => {
-  return settingsCache.signupPromptHtml ?? DEFAULT_SIGNUP_PROMPT_HTML;
+  ipcMain.handle('signup-prompt:get', async () => {
+  return getCurrentMessageHtml();
 });
 
 ipcMain.handle('signup-prompt:reset', async () => {
-  latestSignupPromptHtml = DEFAULT_SIGNUP_PROMPT_HTML;
-  settingsCache = {
-    ...settingsCache,
-    signupPromptHtml: DEFAULT_SIGNUP_PROMPT_HTML,
-  };
-  saveSettings(settingsCache);
-  mainWindow?.webContents.send(
-    'signup-prompt:updated',
-    DEFAULT_SIGNUP_PROMPT_HTML
-  );
+  const selectedVariant = getSelectedMessageVariant();
+
+  const defaultHtml =
+    selectedVariant === 'nonmember'
+      ? DEFAULT_NONMEMBER_MESSAGE_HTML
+      : DEFAULT_MEMBER_MESSAGE_HTML;
+
+  latestSignupPromptHtml = defaultHtml;
+  saveMessageHtmlForVariant(selectedVariant, defaultHtml);
+
+  mainWindow?.webContents.send('signup-prompt:updated', defaultHtml);
   return { ok: true };
 });
 
 ipcMain.handle('signup-prompt:set', async (_evt, html: string) => {
+  const selectedVariant = getSelectedMessageVariant();
+
   latestSignupPromptHtml = html;
-  settingsCache = { ...settingsCache, signupPromptHtml: html };
-  saveSettings(settingsCache);
+  saveMessageHtmlForVariant(selectedVariant, html);
+
   mainWindow?.webContents.send('signup-prompt:updated', html);
   return { ok: true };
 });
+
+ipcMain.handle('message-variant:get', async () => {
+  const selectedMessageVariant = getSelectedMessageVariant();
+
+  return {
+    selectedMessageVariant,
+    html: getCurrentMessageHtml(),
+    memberMessageHtml:
+      settingsCache.memberMessageHtml ?? DEFAULT_MEMBER_MESSAGE_HTML,
+    nonmemberMessageHtml:
+      settingsCache.nonmemberMessageHtml ?? DEFAULT_NONMEMBER_MESSAGE_HTML,
+  };
+});
+
+ipcMain.handle(
+  'message-variant:set-selected',
+  async (_evt, variant: MessageVariant) => {
+    settingsCache = {
+      ...settingsCache,
+      selectedMessageVariant: variant,
+    };
+    saveSettings(settingsCache);
+
+    const html = getCurrentMessageHtml();
+    mainWindow?.webContents.send('signup-prompt:updated', html);
+
+    return { ok: true, selectedMessageVariant: variant, html };
+  }
+);
+
+ipcMain.handle(
+  'message-html:set',
+  async (_evt, { variant, html }: { variant: MessageVariant; html: string }) => {
+    latestSignupPromptHtml = html;
+    saveMessageHtmlForVariant(variant, html);
+
+    if (variant === getSelectedMessageVariant()) {
+      mainWindow?.webContents.send('signup-prompt:updated', html);
+    }
+
+    return { ok: true };
+  }
+);
+
+ipcMain.handle('message-html:get', async (_evt, variant?: MessageVariant) => {
+  const selectedVariant = variant ?? getSelectedMessageVariant();
+
+  if (selectedVariant === 'nonmember') {
+    return settingsCache.nonmemberMessageHtml ?? DEFAULT_NONMEMBER_MESSAGE_HTML;
+  }
+
+  return settingsCache.memberMessageHtml ?? DEFAULT_MEMBER_MESSAGE_HTML;
+});
+
+// ipcMain.handle('signup-prompt:set', async (_evt, html: string) => {
+//   latestSignupPromptHtml = html;
+//   settingsCache = { ...settingsCache, signupPromptHtml: html };
+//   saveSettings(settingsCache);
+//   mainWindow?.webContents.send('signup-prompt:updated', html);
+//   return { ok: true };
+// });
 
 // When returning settings to the renderer, keep whatever is saved
 ipcMain.handle('settings:get', async () => settingsCache);
@@ -961,8 +1083,9 @@ async function modifyHtml(incomingHtmlContent: string) {
   });
 
   // Before H2 styles insert tipline (signup prompt)
-  const signupPromptHtml = latestSignupPromptHtml || DEFAULT_SIGNUP_PROMPT_HTML;
-
+  // const signupPromptHtml = latestSignupPromptHtml || DEFAULT_SIGNUP_PROMPT_HTML;
+  const signupPromptHtml = getCurrentMessageHtml();
+  
   // Add markers around the tipline for easy identification later if needed
   const TIPLINE_START = '<!--TIPLINE_START-->';
   const TIPLINE_END = '<!--TIPLINE_END-->';
@@ -1486,103 +1609,175 @@ async function processAndValidateHtml(htmlContent: string) {
 //   };
 // });
 
+
 ipcMain.handle('sendTestEmail', async (_event, payload) => {
-  const { html, ...rest } = payload;
-  console.log('📤 [Logging only] Would send test email with payload:', rest);
+  const selectedMessageVariant = getSelectedMessageVariant();
+  const payloadWithVariant = {
+    ...payload,
+    messageVariant: payload.messageVariant ?? selectedMessageVariant,
+    isTest: true,
+  };
 
-  console.log('📤 Received test email payload from renderer:', payload);
+  const { html, ...rest } = payloadWithVariant;
 
-  try {
-    const response = await axios.post(
-      'https://t9y4qwn80d.execute-api.us-east-1.amazonaws.com/Prod/send',
-      {
-        ...payload,
-        isTest: true,
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': 'santa-cruz-local-from-computer-12345',
-        },
-      }
-    );
+  console.log('📤 [LOGGING ONLY] Would send TEST email with payload:', {
+    ...rest,
+    htmlPreview: typeof html === 'string' ? html.slice(0, 500) : null,
+    htmlLength: typeof html === 'string' ? html.length : 0,
+  });
 
-    console.log('✅ Test email sent successfully:', response.data);
-    return {
-      success: true,
-      message: 'Test email sent!',
-      data: response.data,
-    };
-  } catch (error) {
-    console.error('❌ Error sending test email:', error);
-
-    if (axios.isAxiosError(error)) {
-      const detail = error.response?.data?.detail;
-      const fallback = error.message || 'Request failed';
-
-      return {
-        success: false,
-        message: detail || fallback,
-        data: error.response?.data || null,
-      };
-    }
-
-    return {
-      success: false,
-      message: 'Unknown error occurred',
-      data: null,
-    };
-  }
+  return {
+    success: true,
+    message: 'Logging only: test email payload printed to console.',
+    data: {
+      campaign_id: `local-test-${Date.now()}`,
+      loggedOnly: true,
+      messageVariant: payloadWithVariant.messageVariant,
+    },
+  };
 });
+
+// commented out the below to log only in aboev version 
+// ipcMain.handle('sendTestEmail', async (_event, payload) => {
+//   const { html, ...rest } = payload;
+//   console.log('📤 [Logging only] Would send test email with payload:', rest);
+
+//   console.log('📤 Received test email payload from renderer:', payload);
+
+//   const selectedMessageVariant = getSelectedMessageVariant();
+//   const payloadWithVariant = {
+//     ...payload,
+//     messageVariant: payload.messageVariant ?? selectedMessageVariant,
+//   };
+
+//   try {
+//     const response = await axios.post(
+//       'https://t9y4qwn80d.execute-api.us-east-1.amazonaws.com/Prod/send',
+//       {
+//         ...payloadWithVariant,
+//         isTest: true,
+//       },
+//       {
+//         headers: {
+//           'Content-Type': 'application/json',
+//           'x-api-key': 'santa-cruz-local-from-computer-12345',
+//         },
+//       }
+//     );
+
+//     console.log('✅ Test email sent successfully:', response.data);
+//     return {
+//       success: true,
+//       message: 'Test email sent!',
+//       data: response.data,
+//     };
+//   } catch (error) {
+//     console.error('❌ Error sending test email:', error);
+
+//     if (axios.isAxiosError(error)) {
+//       const detail = error.response?.data?.detail;
+//       const fallback = error.message || 'Request failed';
+
+//       return {
+//         success: false,
+//         message: detail || fallback,
+//         data: error.response?.data || null,
+//       };
+//     }
+
+//     return {
+//       success: false,
+//       message: 'Unknown error occurred',
+//       data: null,
+//     };
+//   }
+// });
+
 
 // temporarily calling send now in order to quickly replace the button switch this back later
 ipcMain.handle('send-now-email', async (_event, payload) => {
-  const { html, ...rest } = payload;
+  const selectedMessageVariant = getSelectedMessageVariant();
+  const payloadWithVariant = {
+    ...payload,
+    messageVariant: payload.messageVariant ?? selectedMessageVariant,
+    isDraft: true,
+  };
 
-  console.log('📤 Creating draft email from:', payload);
+  const { html, ...rest } = payloadWithVariant;
 
-  try {
-    const response = await axios.post(
-      'https://t9y4qwn80d.execute-api.us-east-1.amazonaws.com/Prod/send',
-      {
-        ...payload,
-        isDraft: true,
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': 'grace-sending-from-her-computer-12345',
-        },
-      }
-    );
+  console.log('📤 [LOGGING ONLY] Would create Mailchimp draft with payload:', {
+    ...rest,
+    htmlPreview: typeof html === 'string' ? html.slice(0, 500) : null,
+    htmlLength: typeof html === 'string' ? html.length : 0,
+  });
 
-    console.log('✅ Draft email created (but not sent)', response.data);
-    return {
-      success: true,
-      message: 'Draft email created (but not sent)',
-      data: response.data,
-    };
-  } catch (error) {
-    console.error('❌ Error sending test email:', error);
-
-    if (axios.isAxiosError(error)) {
-      const detail = error.response?.data?.detail;
-      const fallback = error.message || 'Request failed';
-
-      return {
-        success: false,
-        message: detail || fallback,
-        data: error.response?.data || null,
-      };
-    }
-
-    return {
-      success: false,
-      message: 'Unknown error occurred',
-      data: null,
-    };
-  }
+  return {
+    success: true,
+    message: 'Logging only: draft email payload printed to console.',
+    data: {
+      campaign_id: `local-draft-${Date.now()}`,
+      loggedOnly: true,
+      messageVariant: payloadWithVariant.messageVariant,
+    },
+  };
 });
+
+
+// temporarily calling send now in order to quickly replace the button switch this back later
+// commented out to do logging only above version 
+// ipcMain.handle('send-now-email', async (_event, payload) => {
+//   const { html, ...rest } = payload;
+
+//   console.log('📤 Creating draft email from:', payload);
+
+//   const selectedMessageVariant = getSelectedMessageVariant();
+//   const payloadWithVariant = {
+//     ...payload,
+//     messageVariant: payload.messageVariant ?? selectedMessageVariant,
+//   };
+
+//   try {
+//     const response = await axios.post(
+//       'https://t9y4qwn80d.execute-api.us-east-1.amazonaws.com/Prod/send',
+//       {
+//         ...payloadWithVariant,
+//         isDraft: true,
+//       },
+//       {
+//         headers: {
+//           'Content-Type': 'application/json',
+//           'x-api-key': 'grace-sending-from-her-computer-12345',
+//         },
+//       }
+//     );
+
+//     console.log('✅ Draft email created (but not sent)', response.data);
+//     return {
+//       success: true,
+//       message: 'Draft email created (but not sent)',
+//       data: response.data,
+//     };
+//   } catch (error) {
+//     console.error('❌ Error sending test email:', error);
+
+//     if (axios.isAxiosError(error)) {
+//       const detail = error.response?.data?.detail;
+//       const fallback = error.message || 'Request failed';
+
+//       return {
+//         success: false,
+//         message: detail || fallback,
+//         data: error.response?.data || null,
+//       };
+//     }
+
+//     return {
+//       success: false,
+//       message: 'Unknown error occurred',
+//       data: null,
+//     };
+//   }
+// });
 
 // TODO: Bring this back to send now button
 // ipcMain.handle('send-now-email', async (event, payload) => {

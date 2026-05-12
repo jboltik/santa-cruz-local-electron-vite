@@ -23,6 +23,9 @@ import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 import CreateCampaignButton from './components/CreateCampaignButton';
 
+
+type MessageVariant = 'member' | 'nonmember';
+
 const LOCAL_STORAGE_KEY_SIGNUP_PROMPT = 'signupPromptHtmlContent';
 
 // build once (outside the component or with useMemo inside)
@@ -110,9 +113,9 @@ const App = () => {
   );
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   const shouldFlashUpload = isProcessingUpload || !hasUploadedZip;
-  const [senderFromName, setSenderFromName] = useState('Grace Dobush');
+  const [senderFromName, setSenderFromName] = useState('Santa Cruz Local staff (Kara, Alexandria, Nik, Jay, Fidel, Amaya & Jesse)');
   const [senderFromEmail, setSenderFromEmail] = useState(
-    'insider@craftindustryalliance.org'
+    'info@santacruzlocal.org'
   );
 
   const [linkResults, setLinkResults] = useState<
@@ -175,6 +178,8 @@ const App = () => {
   );
 
   const [signupPromptHtmlContent, setSignupPromptHtmlContent] = useState('');
+  const [selectedMessageVariant, setSelectedMessageVariant] =
+  useState<MessageVariant>('member');
 
   const [userEditedSubject, setUserEditedSubject] = useState(false);
   const userEditedSubjectRef = useRef(userEditedSubject);
@@ -322,7 +327,13 @@ const App = () => {
       ? moment(scheduleDate)
       : getNextSunday();
 
-    setCampaignName(buildDefaultCampaignName('MEMBER', dateForName));
+    // setCampaignName(buildDefaultCampaignName('MEMBER', dateForName));
+    setCampaignName(
+      buildDefaultCampaignName(
+        selectedMessageVariant === 'member' ? 'MEMBER' : 'nonmember',
+        dateForName
+      )
+    );
   }, [scheduleDate, autoCampaignEnabled, userEditedCampaign]);
 
   useEffect(() => {
@@ -375,9 +386,9 @@ const App = () => {
   useEffect(() => {
     (async () => {
       try {
-        const html = await window.electron.getSignupPrompt();
-        // Trust main: it already returns saved value or the real default
-        setSignupPromptHtmlContent(html);
+        const result = await window.electron.getMessageVariant();
+        setSelectedMessageVariant(result.selectedMessageVariant);
+        setSignupPromptHtmlContent(result.html);
       } catch {
         // As a last resort, at least don't blank it out
         const cached = localStorage.getItem(LOCAL_STORAGE_KEY_SIGNUP_PROMPT);
@@ -399,16 +410,56 @@ const App = () => {
     setSignupPromptHtmlContent(event.target.value);
   };
 
+  const handleSelectedMessageVariantChange = async (
+  variant: MessageVariant
+) => {
+  const result = await window.electron.setSelectedMessageVariant(variant);
+
+  setSelectedMessageVariant(result.selectedMessageVariant);
+  setSignupPromptHtmlContent(result.html);
+
+  const dateForName = scheduleDate ? moment(scheduleDate) : getNextSunday();
+  const campaignVariant =
+    result.selectedMessageVariant === 'member' ? 'MEMBER' : 'nonmember';
+
+  const newName = buildDefaultCampaignName(campaignVariant, dateForName);
+  setCampaignName(newName);
+  setUserEditedCampaign(false);
+  window.settings.update({ campaignName: newName });
+};
+
+  // const saveSignupPromptToLocalStorage = async () => {
+  //   const html = signupPromptHtmlContent?.trim();
+  //   if (!html) {
+  //     alert('Tipline content is empty — not saving.');
+  //     return;
+  //   }
+  //   localStorage.setItem(LOCAL_STORAGE_KEY_SIGNUP_PROMPT, html);
+  //   await window.electron.setSignupPrompt(html);
+  //   alert('Tipline edit saved');
+  // };
+
   const saveSignupPromptToLocalStorage = async () => {
-    const html = signupPromptHtmlContent?.trim();
-    if (!html) {
-      alert('Tipline content is empty — not saving.');
-      return;
-    }
-    localStorage.setItem(LOCAL_STORAGE_KEY_SIGNUP_PROMPT, html);
-    await window.electron.setSignupPrompt(html);
-    alert('Tipline edit saved');
-  };
+  const html = signupPromptHtmlContent?.trim();
+  if (!html) {
+    alert('Message content is empty — not saving.');
+    return;
+  }
+
+  localStorage.setItem(
+    `${LOCAL_STORAGE_KEY_SIGNUP_PROMPT}:${selectedMessageVariant}`,
+    html
+  );
+
+  await window.electron.setMessageHtml({
+    variant: selectedMessageVariant,
+    html,
+  });
+
+  alert(
+    `${selectedMessageVariant === 'member' ? 'Member' : 'Nonmember'} message saved`
+  );
+};
 
   const resetToDefault = async () => {
     await window.electron.resetSignupPrompt(); // call the new handler
@@ -529,7 +580,7 @@ const App = () => {
   // ]);
 
   const checkHasChanges = (
-    previewTextVal: string = previewText,
+    previewTextVal: string | null = previewText,
     htmlVal: string = rawHtml,
     subjectVal: string = subject,
     campaignNameVal: string = campaignName,
@@ -723,6 +774,7 @@ const App = () => {
 
     const payload = {
       title: campaignName,
+      messageVariant: selectedMessageVariant,
       subject: subject,
       senderFromEmail: senderFromEmail,
       senderFromName: senderFromName,
@@ -804,6 +856,7 @@ const App = () => {
 
     const payload = {
       title: testcampaignName,
+      messageVariant: selectedMessageVariant,
       subject: `[TEST] ${subject}`,
       senderFromEmail: senderFromEmail,
       senderFromName: senderFromName,
@@ -884,6 +937,7 @@ const App = () => {
 
     const payload = {
       title: campaignName,
+      messageVariant: selectedMessageVariant,
       subject: subject,
       senderFromEmail: senderFromEmail,
       senderFromName: senderFromName,
@@ -1576,7 +1630,7 @@ const App = () => {
                     marginLeft: 8,
                   })}
                 >
-                  <Icon>✏️</Icon> Edit Tipline Section
+                  <Icon>✏️</Icon> Edit Non/Member Message
                 </button>
 
                 {/* Settings: Enable Link Checker (moved down here) */}
@@ -1938,7 +1992,26 @@ const App = () => {
               flexDirection: 'column',
             }}
           >
-            <h2>Edit Tipline Section</h2>
+            {/* <h2>Edit Tipline Section</h2> */}
+            <h2>Edit {selectedMessageVariant === 'member' ? 'Member' : 'Nonmember'} Message</h2>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+            <button
+              onClick={() => handleSelectedMessageVariantChange('member')}
+              style={{
+                fontWeight: selectedMessageVariant === 'member' ? 'bold' : 'normal',
+              }}
+            >
+              Member Message
+            </button>
+            <button
+              onClick={() => handleSelectedMessageVariantChange('nonmember')}
+              style={{
+                fontWeight: selectedMessageVariant === 'nonmember' ? 'bold' : 'normal',
+              }}
+            >
+              Nonmember Message
+            </button>
+          </div>
             <textarea
               value={signupPromptHtmlContent}
               onChange={handleSignupPromptContentChange}

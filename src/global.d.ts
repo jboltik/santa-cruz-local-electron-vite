@@ -26,6 +26,31 @@ declare global {
       onSignupPromptUpdated: (callback: (html: string) => void) => void;
       removeSignupPromptListener: () => void;
 
+      // Member / nonmember messages
+      getMessageVariant: () => Promise<{
+        selectedMessageVariant: 'member' | 'nonmember';
+        html: string;
+        memberMessageHtml: string;
+        nonmemberMessageHtml: string;
+      }>;
+
+      setSelectedMessageVariant: (
+        variant: 'member' | 'nonmember'
+      ) => Promise<{
+        ok: boolean;
+        selectedMessageVariant: 'member' | 'nonmember';
+        html: string;
+      }>;
+
+      setMessageHtml: (args: {
+        variant: 'member' | 'nonmember';
+        html: string;
+      }) => Promise<{ ok: boolean }>;
+
+      getMessageHtml: (
+        variant?: 'member' | 'nonmember'
+      ) => Promise<string>;
+
       // Optional
       selectZipFile: () => Promise<void>;
 
@@ -46,6 +71,7 @@ declare global {
         subject: string;
         senderFromEmail: string;
         senderFromName: string;
+        messageVariant?: 'member' | 'nonmember';
         html: string;
         isTest: boolean;
         previewText?: string;
@@ -56,6 +82,7 @@ declare global {
         subject: string;
         senderFromEmail: string;
         senderFromName: string;
+        messageVariant?: 'member' | 'nonmember';
         html: string;
         isTest?: boolean;
         previewText?: string;
@@ -66,6 +93,7 @@ declare global {
         subject: string;
         senderFromEmail: string;
         senderFromName: string;
+        messageVariant?: 'member' | 'nonmember';
         html: string;
         sendTime: string;
         isTest?: boolean;

@@ -4,7 +4,9 @@
 import { contextBridge, ipcRenderer, shell, IpcRendererEvent } from 'electron';
 import type { SaveHtmlArgs, SaveHtmlResult } from './types/shared';
 import type { AppSettings } from './types/AppSettings';
-import type { CreateCampaignPayload, CreateCampaignResult } from './types/campaign';
+import type { CreateCampaignPayload, CreateCampaignResult, MessageVariant } from './types/campaign';
+
+
 
 contextBridge.exposeInMainWorld('electron', {
 
@@ -40,9 +42,58 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.on('signup-prompt:updated', (_e, html) => cb(html)),
   removeSignupPromptListener: () =>
     ipcRenderer.removeAllListeners('signup-prompt:updated'),
+  
+  
+  
+  // getMessageVariant: (): Promise<{
+  //   selectedMessageVariant: MessageVariant;
+  //   html: string;
+  //   memberMessageHtml: string;
+  //   nonmemberMessageHtml: string;
+  // }> => ipcRenderer.invoke('message-variant:get'),
 
+  // setSelectedMessageVariant: (
+  //   variant: MessageVariant
+  // ): Promise<{
+  //   ok: boolean;
+  //   selectedMessageVariant: MessageVariant;
+  //   html: string;
+  // }> => ipcRenderer.invoke('message-variant:set-selected', variant),
 
- 
+  // setMessageHtml: (args: {
+  //   variant: MessageVariant;
+  //   html: string;
+  // }): Promise<{ ok: boolean }> =>
+  //   ipcRenderer.invoke('message-html:set', args),
+
+  // getMessageHtml: (variant?: MessageVariant): Promise<string> =>
+  //   ipcRenderer.invoke('message-html:get', variant),
+
+ getMessageVariant: (): Promise<{
+  selectedMessageVariant: 'member' | 'nonmember';
+  html: string;
+  memberMessageHtml: string;
+  nonmemberMessageHtml: string;
+}> => ipcRenderer.invoke('message-variant:get'),
+
+setSelectedMessageVariant: (
+  variant: 'member' | 'nonmember'
+): Promise<{
+  ok: boolean;
+  selectedMessageVariant: 'member' | 'nonmember';
+  html: string;
+}> => ipcRenderer.invoke('message-variant:set-selected', variant),
+
+setMessageHtml: (args: {
+  variant: 'member' | 'nonmember';
+  html: string;
+}): Promise<{ ok: boolean }> => ipcRenderer.invoke('message-html:set', args),
+
+getMessageHtml: (
+  variant?: 'member' | 'nonmember'
+): Promise<string> => ipcRenderer.invoke('message-html:get', variant),
+
+  
 
   // ✅ Listen for when ZIP file is selected
   onZipFileSelected: (callback: (filePath: string) => void) =>
@@ -110,6 +161,7 @@ contextBridge.exposeInMainWorld('electron', {
     html: string;
     isTest: boolean;
     previewText?: string;
+    messageVariant?: MessageVariant;
   }): Promise<{ success: boolean; message: string; data?: any }> =>
     ipcRenderer.invoke('sendTestEmail', payload),
 
@@ -121,6 +173,7 @@ contextBridge.exposeInMainWorld('electron', {
     html: string;
     isTest: boolean;
     previewText?: string;
+    messageVariant?: MessageVariant;
   }): Promise<{ success: boolean; message?: string; data?: any }> =>
     ipcRenderer.invoke('send-now-email', payload),
 
@@ -133,6 +186,7 @@ contextBridge.exposeInMainWorld('electron', {
     isTest: boolean;
     previewText?: string;
     sendTime: string; // Include send time for scheduling
+    messageVariant?: MessageVariant;
   }): Promise<{ success: boolean; message?: string; data?: any }> =>
     ipcRenderer.invoke('send-scheduled-email', payload),
 

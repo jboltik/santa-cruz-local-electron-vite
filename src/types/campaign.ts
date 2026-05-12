@@ -33,6 +33,8 @@ export interface CreateCampaignPayload {
 //   };
 // }
 
+export type MessageVariant = 'member' | 'nonmember';
+
 export type CreateCampaignResult = {
   success: boolean;
   message: string;
