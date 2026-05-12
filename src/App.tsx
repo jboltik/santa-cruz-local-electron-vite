@@ -88,6 +88,9 @@ const buildDefaultCampaignName = (
   return `${date.format('YYYYMMDD')} ${variant} newsletter`;
 };
 
+const getCampaignVariantLabel = (variant: MessageVariant) =>
+  variant === 'member' ? 'MEMBER' : 'nonmember';
+
 // 🧪 Debug Electron preload injection
 console.log('🤖 electron object:', window.electron);
 console.log('🧩 ipcRenderer.on exists:', !!window.electron?.ipcRenderer?.on);
@@ -334,7 +337,7 @@ const App = () => {
         dateForName
       )
     );
-  }, [scheduleDate, autoCampaignEnabled, userEditedCampaign]);
+  }, [scheduleDate, autoCampaignEnabled, userEditedCampaign, selectedMessageVariant]);
 
   useEffect(() => {
     window.electron.ipcRenderer.on(
@@ -1245,11 +1248,61 @@ const App = () => {
                 >
                   Campaign Name (internal):
                 </label>
+                <div style={{ marginTop: '4px', marginBottom: '6px' }}>
+                <span
+                  style={{
+                    fontSize: '0.55em',
+                    fontWeight: 'normal',
+                    color: '#ffffff',
+                    marginRight: '8px',
+                  }}
+                >
+                  Issue type:
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectedMessageVariantChange('member')}
+                  style={{
+                    height: '28px',
+                    padding: '0 10px',
+                    marginRight: '6px',
+                    cursor: 'pointer',
+                    fontWeight: selectedMessageVariant === 'member' ? 'bold' : 'normal',
+                    backgroundColor: selectedMessageVariant === 'member' ? '#4d63ff' : '#e6e6e6',
+                    color: selectedMessageVariant === 'member' ? '#fff' : '#111',
+                    border: 'none',
+                    borderRadius: '4px',
+                  }}
+                >
+                  Member
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectedMessageVariantChange('nonmember')}
+                  style={{
+                    height: '28px',
+                    padding: '0 10px',
+                    cursor: 'pointer',
+                    fontWeight: selectedMessageVariant === 'nonmember' ? 'bold' : 'normal',
+                    backgroundColor: selectedMessageVariant === 'nonmember' ? '#4d63ff' : '#e6e6e6',
+                    color: selectedMessageVariant === 'nonmember' ? '#fff' : '#111',
+                    border: 'none',
+                    borderRadius: '4px',
+                  }}
+                >
+                  Nonmember
+                </button>
+              </div>
                 <button
                   type="button"
                   onClick={() => {
                     const nextSunday = getNextSunday();
-                    const newName = buildDefaultCampaignName('MEMBER', nextSunday);
+                    const newName = buildDefaultCampaignName(
+                      getCampaignVariantLabel(selectedMessageVariant),
+                      nextSunday
+                    );
                     setCampaignName(newName);
                     setUserEditedCampaign(false);
                     setSavedCampaignName(newName);
@@ -1270,8 +1323,10 @@ const App = () => {
                     const selectedDate = e.target.value;
                     if (!selectedDate) return;
 
-                    const newName = buildDefaultCampaignName('MEMBER', moment(selectedDate));
-
+                    const newName = buildDefaultCampaignName(
+                      getCampaignVariantLabel(selectedMessageVariant),
+                      moment(selectedDate)
+                    );
                     setScheduleDate(selectedDate);
                     setCampaignName(newName);
                     setUserEditedCampaign(false);
