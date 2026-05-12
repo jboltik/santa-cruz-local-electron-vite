@@ -69,6 +69,22 @@ const computeDateFromScheduleOrNow = (
   return moment(); // now (local)
 };
 
+const getNextSunday = () => {
+  const today = moment();
+
+  // 0 = Sunday
+  const daysUntilSunday = today.day() === 0 ? 0 : 7 - today.day();
+
+  return today.clone().add(daysUntilSunday, 'days');
+};
+
+const buildDefaultCampaignName = (
+  variant: 'MEMBER' | 'nonmember' = 'MEMBER',
+  date = getNextSunday()
+) => {
+  return `${date.format('YYYYMMDD')} ${variant} newsletter`;
+};
+
 // 🧪 Debug Electron preload injection
 console.log('🤖 electron object:', window.electron);
 console.log('🧩 ipcRenderer.on exists:', !!window.electron?.ipcRenderer?.on);
@@ -86,7 +102,7 @@ const App = () => {
   const [userEditedCampaign, setUserEditedCampaign] = useState(false);
   const [autoCampaignEnabled, setAutoCampaignEnabled] = useState(true);
   const [autoCampaignPattern, setAutoCampaignPattern] = useState(
-    '{brand} {MMMM} {YYYY}'
+    '{YYYYMMDD} MEMBER newsletter'
   );
   const [brand, setBrand] = useState('Santa Cruz Local'); // optional
   const [hasUploadedZip, setHasUploadedZip] = useState(
@@ -280,8 +296,12 @@ const App = () => {
       const s = await window.settings.get();
       // populate toggles/pattern/brand so the UI knows current defaults
       setAutoCampaignEnabled(s.autoCampaignEnabled ?? true);
-      setAutoCampaignPattern(s.autoCampaignPattern ?? '{brand} {MMMM} {YYYY}');
+      setAutoCampaignPattern(
+        s.autoCampaignPattern ?? '{YYYYMMDD} MEMBER newsletter'
+      );
+
       setBrand(s.brand ?? 'Santa Cruz Local');
+
 
       // if a specific name was previously saved, keep it
       if (s.campaignName) {
@@ -289,13 +309,8 @@ const App = () => {
         setUserEditedCampaign(true); // prevents auto-regeneration from overwriting
       } else if (s.autoCampaignEnabled ?? true) {
         const d = computeDateFromScheduleOrNow(scheduleDate, scheduleTime);
-        setCampaignName(
-          applyPattern(
-            s.autoCampaignPattern ?? '{brand} {MMMM} {YYYY}',
-            s.brand ?? 'Santa Cruz Local',
-            d
-          )
-        );
+        setCampaignName(buildDefaultCampaignName('MEMBER'));
+    
       }
     })();
   }, []); // run once on mount
@@ -303,16 +318,12 @@ const App = () => {
   useEffect(() => {
     if (!autoCampaignEnabled || userEditedCampaign) return;
 
-    const d = computeDateFromScheduleOrNow(scheduleDate, scheduleTime);
-    setCampaignName(applyPattern(autoCampaignPattern, brand, d));
-  }, [
-    scheduleDate,
-    scheduleTime,
-    autoCampaignEnabled,
-    userEditedCampaign,
-    autoCampaignPattern,
-    brand,
-  ]);
+    const dateForName = scheduleDate
+      ? moment(scheduleDate)
+      : getNextSunday();
+
+    setCampaignName(buildDefaultCampaignName('MEMBER', dateForName));
+  }, [scheduleDate, autoCampaignEnabled, userEditedCampaign]);
 
   useEffect(() => {
     window.electron.ipcRenderer.on(
@@ -1180,6 +1191,44 @@ const App = () => {
                 >
                   Campaign Name (internal):
                 </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextSunday = getNextSunday();
+                    const newName = buildDefaultCampaignName('MEMBER', nextSunday);
+                    setCampaignName(newName);
+                    setUserEditedCampaign(false);
+                    setSavedCampaignName(newName);
+                    window.settings.update({ campaignName: newName });
+                  }}
+                  style={{
+                    marginLeft: '8px',
+                    height: '30px',
+                    padding: '0 10px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Use next Sunday
+                </button>
+                <input
+                  type="date"
+                  onChange={(e) => {
+                    const selectedDate = e.target.value;
+                    if (!selectedDate) return;
+
+                    const newName = buildDefaultCampaignName('MEMBER', moment(selectedDate));
+
+                    setScheduleDate(selectedDate);
+                    setCampaignName(newName);
+                    setUserEditedCampaign(false);
+                    window.settings.update({ campaignName: newName });
+                  }}
+                  style={{
+                    marginLeft: '8px',
+                    height: '30px',
+                    padding: '0 8px',
+                  }}
+                />
                 <input
                   type="text"
                   value={campaignName}
