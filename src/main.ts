@@ -13,10 +13,38 @@ import Store from 'electron-store';
 import type { AppSettings } from './types/AppSettings';
 import type { ImageUploadResponse } from './types/api';
 import { CreateCampaignPayload, CreateCampaignResult } from './types/campaign';
+import crypto from 'node:crypto';
+
 
 const store = new Store();
 
 const IMAGE_UPLOADS_ENABLED = false;
+
+type UploadedImageCacheValue = {
+  url: string;
+};
+
+const uploadedImageCache = new Map<string, UploadedImageCacheValue>();
+
+function getFileHash(filePath: string): string {
+  const buffer = fs.readFileSync(filePath);
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+function getImageCacheKey(zipFilePath: string, imagePath: string, imageFileName: string): string {
+  const zipStats = fs.statSync(zipFilePath);
+  const imageStats = fs.statSync(imagePath);
+  const imageHash = getFileHash(imagePath);
+
+  return [
+    zipFilePath,
+    zipStats.size,
+    zipStats.mtimeMs,
+    imageFileName,
+    imageStats.size,
+    imageHash,
+  ].join(':');
+}
 
 // Example: read the auth token and endpoint
 // const authToken = store.get('authToken') as string;
@@ -327,6 +355,18 @@ async function handleFileUpload() {
           return null;
         }
 
+        const imageCacheKey = getImageCacheKey(zipFilePath, originalPath, file);
+        const cachedImage = uploadedImageCache.get(imageCacheKey);
+
+        if (cachedImage) {
+          console.log(`♻️ Reusing cached uploaded image for ${file}: ${cachedImage.url}`);
+          return {
+            originalFile: file,
+            newFile: file,
+            url: cachedImage.url,
+          };
+        }
+
         // ✅ Rename the image before uploading
         const timestamp = new Date()
           .toISOString()
@@ -344,13 +384,13 @@ async function handleFileUpload() {
         }
 
         console.log(`📤 Uploading image: ${newPath}`);
-        const url = await uploadImageToS3(newPath);
 
+        const url = await uploadImageToS3(newPath);
         if (!url) {
           console.error(`❌ Upload failed for: ${newPath}`);
           return null;
         }
-
+        uploadedImageCache.set(imageCacheKey, { url });
         return { originalFile: file, newFile: newFileName, url };
       })
     ).then((results) => results.filter((image) => image !== null));
@@ -1610,17 +1650,21 @@ async function processAndValidateHtml(htmlContent: string) {
 // });
 
 
+// THIS VERSION IS THE LATEST LOGGING ONL, BELOW IS THE LATEST REAL SEND VERSION 
 ipcMain.handle('sendTestEmail', async (_event, payload) => {
   const selectedMessageVariant = getSelectedMessageVariant();
+
   const payloadWithVariant = {
     ...payload,
     messageVariant: payload.messageVariant ?? selectedMessageVariant,
     isTest: true,
+    isDraft: false,
+    isScheduled: false,
   };
 
   const { html, ...rest } = payloadWithVariant;
 
-  console.log('📤 [LOGGING ONLY] Would send TEST email with payload:', {
+  console.log('📤 [LOGGING ONLY] Would send TEST email:', {
     ...rest,
     htmlPreview: typeof html === 'string' ? html.slice(0, 500) : null,
     htmlLength: typeof html === 'string' ? html.length : 0,
@@ -1636,6 +1680,59 @@ ipcMain.handle('sendTestEmail', async (_event, payload) => {
     },
   };
 });
+
+
+// THIS VERSION IS THE LATEST 
+// ipcMain.handle('sendTestEmail', async (_event, payload) => {
+//   const selectedMessageVariant = getSelectedMessageVariant();
+
+//   const payloadWithVariant = {
+//     ...payload,
+//     messageVariant: payload.messageVariant ?? selectedMessageVariant,
+//     isTest: true,
+//   };
+
+//   console.log('📤 Sending TEST email request:', {
+//     ...payloadWithVariant,
+//     html: `[HTML length: ${payloadWithVariant.html?.length ?? 0}]`,
+//   });
+
+//   try {
+//     const response = await axios.post(
+//       'https://t9y4qwn80d.execute-api.us-east-1.amazonaws.com/Prod/send',
+//       payloadWithVariant,
+//       {
+//         headers: {
+//           'Content-Type': 'application/json',
+//           'x-api-key': 'santa-cruz-local-from-computer-12345',
+//         },
+//       }
+//     );
+
+//     return {
+//       success: true,
+//       message: 'Test email sent!',
+//       data: response.data,
+//     };
+//   } catch (error) {
+//     console.error('❌ Error sending test email:', error);
+
+//     if (axios.isAxiosError(error)) {
+//       return {
+//         success: false,
+//         message: error.response?.data?.detail || error.message || 'Request failed',
+//         data: error.response?.data || null,
+//       };
+//     }
+
+//     return {
+//       success: false,
+//       message: 'Unknown error occurred',
+//       data: null,
+//     };
+//   }
+// });
+
 
 // commented out the below to log only in aboev version 
 // ipcMain.handle('sendTestEmail', async (_event, payload) => {
@@ -1693,19 +1790,21 @@ ipcMain.handle('sendTestEmail', async (_event, payload) => {
 //   }
 // });
 
-
-// temporarily calling send now in order to quickly replace the button switch this back later
+// logging only version latest 
 ipcMain.handle('send-now-email', async (_event, payload) => {
   const selectedMessageVariant = getSelectedMessageVariant();
+
   const payloadWithVariant = {
     ...payload,
     messageVariant: payload.messageVariant ?? selectedMessageVariant,
-    isDraft: true,
+    isTest: false,
+    isDraft: false,
+    isScheduled: false,
   };
 
   const { html, ...rest } = payloadWithVariant;
 
-  console.log('📤 [LOGGING ONLY] Would create Mailchimp draft with payload:', {
+  console.log('📤 [LOGGING ONLY] Would send PRODUCTION email:', {
     ...rest,
     htmlPreview: typeof html === 'string' ? html.slice(0, 500) : null,
     htmlLength: typeof html === 'string' ? html.length : 0,
@@ -1713,14 +1812,98 @@ ipcMain.handle('send-now-email', async (_event, payload) => {
 
   return {
     success: true,
-    message: 'Logging only: draft email payload printed to console.',
+    message: 'Logging only: production email payload printed to console.',
     data: {
-      campaign_id: `local-draft-${Date.now()}`,
+      campaign_id: `local-send-${Date.now()}`,
       loggedOnly: true,
       messageVariant: payloadWithVariant.messageVariant,
     },
   };
 });
+
+
+
+// non logging version this is the latest no logging version see above for logging version 
+// ipcMain.handle('send-now-email', async (_event, payload) => {
+//   const selectedMessageVariant = getSelectedMessageVariant();
+
+//   const payloadWithVariant = {
+//     ...payload,
+//     messageVariant: payload.messageVariant ?? selectedMessageVariant,
+//     isTest: false,
+//     isDraft: false,
+//   };
+
+//   console.log('📤 Sending PRODUCTION email request:', {
+//     ...payloadWithVariant,
+//     html: `[HTML length: ${payloadWithVariant.html?.length ?? 0}]`,
+//   });
+
+//   try {
+//     const response = await axios.post(
+//       'https://t9y4qwn80d.execute-api.us-east-1.amazonaws.com/Prod/send',
+//       payloadWithVariant,
+//       {
+//         headers: {
+//           'Content-Type': 'application/json',
+//           'x-api-key': 'grace-sending-from-her-computer-12345',
+//         },
+//       }
+//     );
+
+//     return {
+//       success: true,
+//       message: 'Production email sent!',
+//       data: response.data,
+//     };
+//   } catch (error) {
+//     console.error('❌ Error sending production email:', error);
+
+//     if (axios.isAxiosError(error)) {
+//       return {
+//         success: false,
+//         message: error.response?.data?.detail || error.message || 'Request failed',
+//         data: error.response?.data || null,
+//       };
+//     }
+
+//     return {
+//       success: false,
+//       message: 'Unknown error occurred',
+//       data: null,
+//     };
+//   }
+// });
+
+
+
+// temporarily calling send now in order to quickly replace the button switch this back later
+// ipcMain.handle('send-now-email', async (_event, payload) => {
+//   const selectedMessageVariant = getSelectedMessageVariant();
+//   const payloadWithVariant = {
+//     ...payload,
+//     messageVariant: payload.messageVariant ?? selectedMessageVariant,
+//     isDraft: true,
+//   };
+
+//   const { html, ...rest } = payloadWithVariant;
+
+//   console.log('📤 [LOGGING ONLY] Would create Mailchimp draft with payload:', {
+//     ...rest,
+//     htmlPreview: typeof html === 'string' ? html.slice(0, 500) : null,
+//     htmlLength: typeof html === 'string' ? html.length : 0,
+//   });
+
+//   return {
+//     success: true,
+//     message: 'Logging only: draft email payload printed to console.',
+//     data: {
+//       campaign_id: `local-draft-${Date.now()}`,
+//       loggedOnly: true,
+//       messageVariant: payloadWithVariant.messageVariant,
+//     },
+//   };
+// });
 
 
 // temporarily calling send now in order to quickly replace the button switch this back later
@@ -1826,6 +2009,93 @@ ipcMain.handle('send-now-email', async (_event, payload) => {
 //   };
 // }
 // });
+
+// latest version logging only see below for real send 
+ipcMain.handle('send-scheduled-email', async (_event, payload) => {
+  const selectedMessageVariant = getSelectedMessageVariant();
+
+  const payloadWithVariant = {
+    ...payload,
+    messageVariant: payload.messageVariant ?? selectedMessageVariant,
+    isTest: false,
+    isDraft: false,
+    isScheduled: true,
+  };
+
+  const { html, ...rest } = payloadWithVariant;
+
+  console.log('📅 [LOGGING ONLY] Would schedule email:', {
+    ...rest,
+    htmlPreview: typeof html === 'string' ? html.slice(0, 500) : null,
+    htmlLength: typeof html === 'string' ? html.length : 0,
+  });
+
+  return {
+    success: true,
+    message: 'Logging only: scheduled email payload printed to console.',
+    data: {
+      campaign_id: `local-scheduled-${Date.now()}`,
+      loggedOnly: true,
+      messageVariant: payloadWithVariant.messageVariant,
+      sendTime: payloadWithVariant.sendTime,
+    },
+  };
+});
+
+
+// latest version no -logging real send see above for logging 
+// ipcMain.handle('send-scheduled-email', async (_event, payload) => {
+//   const selectedMessageVariant = getSelectedMessageVariant();
+
+//   const payloadWithVariant = {
+//     ...payload,
+//     messageVariant: payload.messageVariant ?? selectedMessageVariant,
+//     isTest: false,
+//     isDraft: false,
+//     isScheduled: true,
+//   };
+
+//   console.log('📅 Scheduling email request:', {
+//     ...payloadWithVariant,
+//     html: `[HTML length: ${payloadWithVariant.html?.length ?? 0}]`,
+//   });
+
+//   try {
+//     const response = await axios.post(
+//       'https://t9y4qwn80d.execute-api.us-east-1.amazonaws.com/Prod/send',
+//       payloadWithVariant,
+//       {
+//         headers: {
+//           'Content-Type': 'application/json',
+//           'x-api-key': 'grace-sending-from-her-computer-12345',
+//         },
+//       }
+//     );
+
+//     return {
+//       success: true,
+//       message: 'Email scheduled!',
+//       data: response.data,
+//     };
+//   } catch (error) {
+//     console.error('❌ Error scheduling email:', error);
+
+//     if (axios.isAxiosError(error)) {
+//       return {
+//         success: false,
+//         message: error.response?.data?.detail || error.message || 'Request failed',
+//         data: error.response?.data || null,
+//       };
+//     }
+
+//     return {
+//       success: false,
+//       message: 'Unknown error occurred',
+//       data: null,
+//     };
+//   }
+// });
+
 
 // ipcMain.handle('send-scheduled-email', async (event, payload) => {
 //   const { html, ...rest } = payload;

@@ -216,30 +216,8 @@ const emailTemplate: string = `
     class="darkmode body" 
     style="-webkit-text-size-adjust: none;-ms-text-size-adjust: 100%;-webkit-font-smoothing: antialiased;-moz-osx-font-smoothing: grayscale;margin: 0 !important;padding: 0 !important;min-width: 100% !important;height: 100% !important;width: 100% !important;"
 >
-    <div style="
-            display:none;
-            max-height:0;
-            overflow:hidden;
-        ">
-		 *|MC_PREVIEW_TEXT|*
-    </div>
-    
-    <div style="
-            display:none;
-            max-height:0px;
-            overflow:hidden;
-        ">
-        &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;
-        &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;
-        &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;
-        &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;
-        &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;
-        &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;
-        &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;
-        &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;
-        &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;
-        &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;
-    </div>
+
+
     <table 
         role="presentation" 
         style="width: 100%;max-width: 640px;margin: 0 auto;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" 
@@ -267,133 +245,7 @@ const emailTemplate: string = `
                     <tr>
                     <td align="center">
                     <![endif]-->
-                    <table 
-                        role="presentation" 
-                        style="width: 100%;max-width: 640px;margin: 0 auto;padding-bottom: 10px;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" 
-                        cellspacing="0" 
-                        cellpadding="10" 
-                        align="center" 
-                        width="100%" 
-                        class="mobile-table"
-                    >
-                        
-                            <tr>
-                                <td 
-                                    align="center" 
-                                    valign="top" 
-                                    background="https://mcusercontent.com/9026fdf4a90c6d2e52108a503/images/289b6acf-f043-bee3-9a5a-c7709af81268.jpg" 
-                                    style="background-size: auto 300px;background-repeat: repeat-x;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;"
-                                >
-                                    <table 
-                                        role="presentation" 
-                                        style="width: 100%;max-width: 640px;margin: 0 auto;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" 
-                                        cellspacing="0" 
-                                        cellpadding="5" 
-                                        align="center" 
-                                        width="100%"
-                                    >
-                                        
-                                            <tr>
-                                                <td 
-                                                    align="left" 
-                                                    width="39%" 
-                                                    valign="top" 
-                                                    style="color: #ffffff;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" 
-                                                    class="keepWhite"
-                                                >
-                                                    <a 
-                                                        href="*|ARCHIVE|*" 
-                                                        target="_blank" 
-                                                        style="color: #ffffff !important;text-decoration: none;text-align: left;font-size: 16px;display: inline:block;font-family: 'Open Sans', Helvetica,Arial,Lucida,sans-serif;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" 
-                                                        class="keepWhite"
-                                                    >
-                                                        <span style="color:#ffffff; text-decoration: none !important;" class="keepWhite">View web version</span>
-                                                    </a>
-                                                </td>
-                                                <td 
-                                                    align="right" 
-                                                    width="65%" 
-                                                    style="font-family: 'Open Sans',Helvetica,Arial,Lucida,sans-serif;font-size: 16px;color: #ffffff;font-weight: 400;text-transform: uppercase;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;"
-                                                >
-                                                    *|DATE:F|* *|DATE:Y|* ISSUE
-                                                </td>
-                                            </tr>
-                                        
-                                    </table>
-                                    <table 
-                                        role="presentation" 
-                                        style="width: 100%;max-width: 640px;margin: 0 auto;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" 
-                                        cellspacing="0" 
-                                        cellpadding="0" 
-                                        align="center" 
-                                        width="100%"
-                                    >
-                                        
-                                            <tr>
-                                                <td style="padding-top: 12px;padding-bottom: 5px;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;">
-                                                    <center>
-                                                        <img 
-                                                            src="https://mcusercontent.com/9026fdf4a90c6d2e52108a503/images/16b0eec5-b828-57c7-c4ea-b3b5595ccb62.png" 
-                                                            width="445" 
-                                                            border="0" 
-                                                            class="imgsz" 
-                                                            alt="CRAFT INDUSTRY INSIDER" 
-                                                            style="display: block;
-                                                            color: #ffffff;
-                                                            max-width: 445px;
-                                                            font-family:Helvetica, Arial, sans-serif;
-                                                            font-size: 40px;
-                                                            font-weight: bold;
-                                                            -ms-interpolation-mode: bicubic;
-                                                            border: none;
-                                                            height: auto !important;"
-                                                        >
-                                                    </center>
-                                                    </td>
-                                                </tr>
-                                            <tr>
-                                                <td 
-                                                    align="center" 
-                                                    style="padding-bottom: 8px;color: #ffffff;font-size: 16px;font-family: 'Open Sans',Helvetica,Arial,Lucida,sans-serif;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" 
-                                                    class="mtl"
-                                                >
-                                                    <i>Exclusively for corporate members.</i>
-                                                </td>
-                                            </tr>
-                                        
-                                    </table>
-                                    <table 
-                                        role="presentation" 
-                                        tyle="width: 100%;max-width: 640px;margin: 0 auto;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;" 
-                                        cellspacing="0" 
-                                        cellpadding="5" 
-                                        align="center" 
-                                        width="100%"
-                                    >
-                                        
-                                            <tr>
-                                                <td align="right" width="45%" valign="top" style="-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;">
-                                                    <img 
-                                                        alt="A Photo of Grace Herself" 
-                                                        src="https://mcusercontent.com/9026fdf4a90c6d2e52108a503/images/69844b6b-583b-e958-1b14-9b5a718389d6.png" 
-                                                        width="40" 
-                                                        class="img70" border="0" align="right" style="max-width: 40px;height: auto !important;"
-                                                    >
-                                                </td>
-                                                <td 
-                                                    align="left" 
-                                                    width="54%" 
-                                                    style="padding-bottom: 14px;font-family: 'Open Sans',Helvetica,Arial,Lucida,sans-serif;font-size: 14px;color: #ffffff;font-weight: 400;text-transform: uppercase;-webkit-text-size-adjust: 100%;-ms-text-size-adjust: 100%;"
-                                                >
-                                                    By <b>Grace Dobush</b>
-                                                </td>
-                                            </tr>
-                                        
-                                    </table>
-                                </td>
-                            </tr>
-                        
-                    </table>
+               
                     <!--[if (gte mso 9)|(IE)]>
                     </td>
                     </tr>
@@ -436,7 +288,7 @@ const emailTemplate: string = `
 
 
 
-
+{{INSERTED_PREVIEW_TEXT}}
 {{INSERTED_HTML}}
         
      
