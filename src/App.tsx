@@ -1572,6 +1572,48 @@ const App = () => {
             <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
               <button
                 onClick={handleSendTest}
+                disabled={hasChanges || testStatus === 'loading' || !finalHtml}
+                style={merge(
+                  btnBase,
+                  hasChanges || testStatus === 'loading' || !finalHtml
+                    ? btnDisabled
+                    : btnPrimary
+                )}
+                title={`Send test for ${selectedMessageVariant}`}
+              >
+                {testStatus === 'loading'
+                  ? '⏳ Sending Test...'
+                  : `Send ${selectedMessageVariant === 'member' ? 'Member' : 'Nonmember'} Test`}
+              </button>
+
+              <button
+                onClick={handleSendNow}
+                disabled={hasChanges || isNowSending || !finalHtml}
+                style={merge(
+                  btnBase,
+                  hasChanges || isNowSending || !finalHtml ? btnDisabled : btnWarn,
+                  isNowSending ? { opacity: 0.8 } : {}
+                )}
+                title={`Send production ${selectedMessageVariant} campaign now`}
+              >
+                {isNowSending
+                  ? '⏳ Sending...'
+                  : `Send ${selectedMessageVariant === 'member' ? 'Member' : 'Nonmember'} Now`}
+              </button>
+
+              <button
+                onClick={handleSchedule}
+                disabled={hasChanges || !finalHtml}
+                style={merge(
+                  btnBase,
+                  hasChanges || !finalHtml ? btnDisabled : btnSuccess
+                )}
+                title={`Schedule ${selectedMessageVariant} campaign`}
+              >
+                Schedule {selectedMessageVariant === 'member' ? 'Member' : 'Nonmember'}
+              </button>
+              <button
+                onClick={handleSendTest}
                 disabled={hasChanges || testStatus === 'loading'}
                 style={merge(
                   btnBase,
@@ -1581,6 +1623,21 @@ const App = () => {
                 )}
               >
                 {testStatus === 'loading' ? '⏳ Sending...' : 'Send Test'}
+              </button>
+              <button
+                onClick={handleSendTest}
+                disabled={hasChanges || testStatus === 'loading' || !finalHtml}
+                style={merge(
+                  btnBase,
+                  hasChanges || testStatus === 'loading' || !finalHtml
+                    ? btnDisabled
+                    : btnPrimary
+                )}
+                title={`Send test for ${selectedMessageVariant}`}
+              >
+                {testStatus === 'loading'
+                  ? '⏳ Sending Test...'
+                  : `Send ${selectedMessageVariant === 'member' ? 'Member' : 'Nonmember'} Test`}
               </button>
 
               {/* <CreateCampaignButton
